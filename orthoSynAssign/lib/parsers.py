@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import logging
+import gzip
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,11 @@ def read_gff3(file_path: str) -> List[GFFFeature]:
     features = []
     logger.info(f"Reading GFF3 file: {file_path}")
 
-    with open(file_path, "r") as f:
+    if file_path.endswith(".gz"):
+        f = gzip.open(file_path, "rt", encoding="utf-8")
+    else:
+        f = open(file_path, "r", encoding="utf-8")
+    with f:
         for line_num, line in enumerate(f, 1):
             line = line.strip()
 
@@ -183,7 +188,11 @@ def read_gtf(file_path: str) -> List[GFFFeature]:
     features = []
     logger.info(f"Reading GTF file: {file_path}")
 
-    with open(file_path, "r") as f:
+    if file_path.endswith(".gz"):
+        f = gzip.open(file_path, "rt", encoding="utf-8")
+    else:
+        f = open(file_path, "r", encoding="utf-8")
+    with f:
         for line_num, line in enumerate(f, 1):
             line = line.strip()
 
@@ -261,7 +270,11 @@ def read_orthofinder_table(file_path: str) -> Dict[str, Dict[str, List[str]]]:
     orthogroups = {}
     logger.info(f"Reading OrthoFinder table: {file_path}")
 
-    with open(file_path, "r") as f:
+    if file_path.endswith(".gz"):
+        f = gzip.open(file_path, "rt", encoding="utf-8")
+    else:
+        f = open(file_path, "r", encoding="utf-8")
+    with f:
         # Read header to get species names
         header = f.readline().strip().split("\t")
         if len(header) < 2:
@@ -273,7 +286,7 @@ def read_orthofinder_table(file_path: str) -> Dict[str, Dict[str, List[str]]]:
 
         # Read orthogroup data
         for line_num, line in enumerate(f, 2):  # Start at 2 since we read header
-            line = line.strip()
+            line = line.strip("\n")
             if not line:
                 continue
 
@@ -306,7 +319,7 @@ def read_orthofinder_table(file_path: str) -> Dict[str, Dict[str, List[str]]]:
 
 
 def read_gff_folder(
-    folder_path: str, file_extension: str = ".gff3"
+    folder_path: str, file_extension: str = ".gff"
 ) -> Dict[str, List[GFFFeature]]:
     """
     Read all GFF3 files from a folder.
@@ -323,11 +336,15 @@ def read_gff_folder(
 
     results = {}
     folder = Path(folder_path)
-
-    for file_path in folder.glob(f"*{file_extension}"):
-        if file_path.is_file():
+    file_paths = []
+    for file_path in folder.glob(f"*{file_extension}*"):
+        if file_path.is_file() and (
+            file_path.name.endswith(file_extension)
+            or file_path.name.endswith(f"{file_extension}3")
+            or file_path.name.endswith(f"{file_extension}3.gz")
+            or file_path.name.endswith(f"{file_extension}.gz")
+        ):
             species_name = file_path.stem
-            logger.info(f"Reading {species_name} from {file_path}")
             results[species_name] = read_gff3(str(file_path))
 
     logger.info(f"Loaded annotations for {len(results)} species from {folder_path}")
@@ -353,8 +370,11 @@ def read_gtf_folder(
     results = {}
     folder = Path(folder_path)
 
-    for file_path in folder.glob(f"*{file_extension}"):
-        if file_path.is_file():
+    for file_path in folder.glob(f"*{file_extension}*"):
+        if file_path.is_file() and (
+            file_path.name.endswith(file_extension)
+            or file_path.name.endswith(f"{file_extension}.gz")
+        ):
             species_name = file_path.stem
             logger.info(f"Reading {species_name} from {file_path}")
             results[species_name] = read_gtf(str(file_path))

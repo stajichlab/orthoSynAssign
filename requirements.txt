@@ -4,3 +4,6 @@
 # pandas>=1.0.0
 # numpy>=1.19.0
 # biopython>=1.78
+black==21.12b0
+flake8==3.9.2
+pylint==2.8.3

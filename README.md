@@ -48,7 +48,7 @@ python orthoSynAssign.py --gff_folder annotations/ --orthofinder Orthogroups.tsv
 ### Command Line Options
 
 - `--gff_folder PATH` - Path to folder containing GFF3 formatted genome annotation files
-- `--gtf_folder PATH` - Path to folder containing GTF formatted genome annotation files  
+- `--gtf_folder PATH` - Path to folder containing GTF formatted genome annotation files
   (Note: `--gff_folder` and `--gtf_folder` are mutually exclusive)
 - `--orthofinder PATH` - Path to OrthoFinder Orthogroups.tsv file (required)
 - `-o, --output PATH` - Output directory for results (default: output)

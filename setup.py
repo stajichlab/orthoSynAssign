@@ -3,7 +3,11 @@ from pathlib import Path
 
 # Read the README file
 this_directory = Path(__file__).parent
-long_description = (this_directory / "README.md").read_text() if (this_directory / "README.md").exists() else ""
+long_description = (
+    (this_directory / "README.md").read_text()
+    if (this_directory / "README.md").exists()
+    else ""
+)
 
 setup(
     name="orthoSynAssign",
@@ -32,8 +36,8 @@ setup(
         # Example: "pandas>=1.0.0",
     ],
     entry_points={
-        'console_scripts': [
-            'orthoSynAssign=orthoSynAssign:main',
+        "console_scripts": [
+            "orthoSynAssign=orthoSynAssign:main",
         ],
     },
     include_package_data=True,

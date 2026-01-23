@@ -43,6 +43,79 @@ class GFFFeature:
         )
 
 
+def check_add_gene_features(features: List[GFFFeature]) -> List[GFFFeature]:
+    """
+    Check if gene features exist, and add them if missing.
+
+    If there are no 'gene' type features but there are 'exon' features,
+    this function will create gene features by grouping exons by gene_id
+    and finding the min/max coordinates.
+
+    Args:
+        features: List of GFFFeature objects
+
+    Returns:
+        List of GFFFeature objects, with gene features added if necessary
+    """
+    # Check if there are any gene type features
+    has_gene_features = any(f.type == "gene" for f in features)
+
+    if has_gene_features:
+        logger.info("Gene features already present, returning unchanged")
+        return features
+
+    # Build dictionary of exons grouped by gene_id
+    gene_groups = {}
+    for feature in features:
+        if feature.type == "exon":
+            if (
+                gene_id := feature.attributes.get("gene_id")
+                or feature.attributes.get("name")
+                or feature.attributes.get("ID")
+                or feature.attributes.get("Name")
+            ):
+                if gene_id not in gene_groups:
+                    gene_groups[gene_id] = []
+                gene_groups[gene_id].append(feature)
+
+    if not gene_groups:
+        logger.info("No exon features with gene_id found, returning unchanged")
+        return features
+
+    # Create gene features from grouped exons
+    new_gene_features = []
+    for gene_id, exons in gene_groups.items():
+        min_start = min(exon.start for exon in exons)
+        max_end = max(exon.end for exon in exons)
+
+        # Use attributes from first exon as template
+        first_exon = exons[0]
+        gene_attributes = {"ID": gene_id, "gene_id": gene_id}
+
+        # Copy relevant attributes from the exon if they exist
+        for key in ["Name", "name", "description", "biotype"]:
+            if key in first_exon.attributes:
+                gene_attributes[key] = first_exon.attributes[key]
+
+        gene_feature = GFFFeature(
+            seqid=first_exon.seqid,
+            source=first_exon.source,
+            feature_type="gene",
+            start=min_start,
+            end=max_end,
+            score=None,
+            strand=first_exon.strand,
+            phase=".",
+            attributes=gene_attributes,
+        )
+        new_gene_features.append(gene_feature)
+
+    logger.info(f"Created {len(new_gene_features)} gene features from exons")
+
+    # Return combined list with new gene features at the beginning
+    return new_gene_features + features
+
+
 def parse_gff3_attributes(attr_string: str) -> Dict[str, str]:
     """
     Parse GFF3 attributes field.
@@ -336,7 +409,6 @@ def read_gff_folder(
 
     results = {}
     folder = Path(folder_path)
-    file_paths = []
     for file_path in folder.glob(f"*{file_extension}*"):
         if file_path.is_file() and (
             file_path.name.endswith(file_extension)

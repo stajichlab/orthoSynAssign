@@ -1,0 +1,6 @@
+# Python dependencies
+# No external dependencies required for basic functionality
+# Add dependencies here as needed, for example:
+# pandas>=1.0.0
+# numpy>=1.19.0
+# biopython>=1.78

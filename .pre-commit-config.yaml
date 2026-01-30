@@ -1,16 +1,36 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
--   repo: https://github.com/pre-commit/pre-commit-hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-    -   id: trailing-whitespace
-    -   id: end-of-file-fixer
-    -   id: check-yaml
-    -   id: check-added-large-files
-        args: ['--maxkb=2000']
--   repo: https://github.com/psf/black
-    rev: 22.10.0
+      - id: check-symlinks
+      - id: destroyed-symlinks
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-ast
+      - id: check-added-large-files
+        args: ["--maxkb=2000"]
+      - id: check-merge-conflict
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: detect-private-key
+      - id: debug-statements
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
     hooks:
-    -   id: black
-        language_version: python3
+      - id: codespell
+        exclude: '(^tests/|\.svg$)'
+        args:
+          - --ignore-words-list=nd,reacher,thist,ths,ure,referenc,wile,nin,pid
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.14
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+        exclude: ^tests
+      - id: ruff-format
+        args: ["--config", "line-length=130"]
+        exclude: ^tests

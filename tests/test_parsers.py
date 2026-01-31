@@ -8,7 +8,7 @@ Verifies that the expected number of features are found and parsed correctly.
 import unittest
 import os
 from pathlib import Path
-from orthoSynAssign.lib.parsers import read_gff3, read_gtf, GFFFeature
+from orthosynassign.lib.parsers import read_gff3, read_gtf, GFFFeature
 
 
 class TestGFFParsers(unittest.TestCase):

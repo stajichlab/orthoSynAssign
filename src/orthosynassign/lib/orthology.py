@@ -29,11 +29,7 @@ def organize_chromosomes(
 
     genomicindex: Dict[str, int] = {}
     for idx, feat in enumerate(chromsorted):
-        gene_name = (
-            feat.attributes.get("Name")
-            or feat.attributes.get("gene_id")
-            or feat.attributes.get("ID")
-        )
+        gene_name = feat.attributes.get("Name") or feat.attributes.get("gene_id") or feat.attributes.get("ID")
         if gene_name:
             genomicindex[gene_name] = idx
 

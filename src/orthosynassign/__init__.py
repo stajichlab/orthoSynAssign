@@ -5,5 +5,7 @@ A tool for analyzing orthologous groups and synteny using OrthoFinder or other t
 and genome annotation files (GFF3/GTF).
 """
 
-__version__ = "0.1.0"
-__author__ = "Jason Stajich"
+from importlib.metadata import metadata
+
+VERSION = metadata("orthosynassign")["Version"]
+AUTHOR = metadata("orthosynassign")["Author-email"]

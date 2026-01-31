@@ -4,7 +4,7 @@ File parsers for GTF, GFF3, and OrthoFinder ortholog tables.
 
 import os
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Optional
 import logging
 import gzip
 
@@ -37,10 +37,7 @@ class GFFFeature:
         self.attributes = attributes
 
     def __repr__(self):
-        return (
-            f"GFFFeature({self.seqid}:{self.start}-{self.end} "
-            f"{self.strand} {self.type})"
-        )
+        return f"GFFFeature({self.seqid}:{self.start}-{self.end} {self.strand} {self.type})"
 
 
 def check_add_gene_features(features: List[GFFFeature]) -> List[GFFFeature]:
@@ -365,9 +362,7 @@ def read_orthofinder_table(file_path: str) -> Dict[str, Dict[str, List[str]]]:
 
             fields = line.split("\t")
             if len(fields) != len(header):
-                logger.warning(
-                    f"Line {line_num}: Expected {len(header)} fields, got {len(fields)}"
-                )
+                logger.warning(f"Line {line_num}: Expected {len(header)} fields, got {len(fields)}")
                 continue
 
             orthogroup_id = fields[0]
@@ -378,11 +373,7 @@ def read_orthofinder_table(file_path: str) -> Dict[str, Dict[str, List[str]]]:
                 genes_str = fields[i].strip()
                 if genes_str:
                     # Genes are usually separated by commas or spaces
-                    genes = [
-                        g.strip()
-                        for g in genes_str.replace(",", " ").split()
-                        if g.strip()
-                    ]
+                    genes = [g.strip() for g in genes_str.replace(",", " ").split() if g.strip()]
                     orthogroups[orthogroup_id][species] = genes
                 else:
                     orthogroups[orthogroup_id][species] = []
@@ -391,9 +382,7 @@ def read_orthofinder_table(file_path: str) -> Dict[str, Dict[str, List[str]]]:
     return orthogroups
 
 
-def read_gff_folder(
-    folder_path: str, file_extension: str = ".gff"
-) -> Dict[str, List[GFFFeature]]:
+def read_gff_folder(folder_path: str, file_extension: str = ".gff") -> Dict[str, List[GFFFeature]]:
     """
     Read all GFF3 files from a folder.
 
@@ -423,9 +412,7 @@ def read_gff_folder(
     return results
 
 
-def read_gtf_folder(
-    folder_path: str, file_extension: str = ".gtf"
-) -> Dict[str, List[GFFFeature]]:
+def read_gtf_folder(folder_path: str, file_extension: str = ".gtf") -> Dict[str, List[GFFFeature]]:
     """
     Read all GTF files from a folder.
 
@@ -443,13 +430,42 @@ def read_gtf_folder(
     folder = Path(folder_path)
 
     for file_path in folder.glob(f"*{file_extension}*"):
-        if file_path.is_file() and (
-            file_path.name.endswith(file_extension)
-            or file_path.name.endswith(f"{file_extension}.gz")
-        ):
+        if file_path.is_file() and (file_path.name.endswith(file_extension) or file_path.name.endswith(f"{file_extension}.gz")):
             species_name = file_path.stem
             logger.info(f"Reading {species_name} from {file_path}")
             results[species_name] = read_gtf(str(file_path))
 
     logger.info(f"Loaded annotations for {len(results)} species from {folder_path}")
     return results
+
+
+def save_results_tsv(results, filename):
+    """
+    Format: SOG_ID \t Genome_A \t Genome_B \t ...
+    Where cells contain comma-separated locus_tags.
+    """
+    if not results:
+        return
+
+    # Determine all unique genomes across all results for header
+    all_genomes = sorted(list({g.sample_name for _, sog in results for g in sog.keys()}))
+
+    with open(filename, "w") as f:
+        # Write Header
+        header = ["SOG_ID"] + all_genomes
+        f.write("\t".join(header) + "\n")
+
+        # Write Rows
+        for sog_id, sog_dict in results:
+            row = [sog_id]
+            for g_name in all_genomes:
+                # Find the genome object that matches the name
+                # (Assuming sog_dict keys are Genome objects)
+                matching_genes = []
+                for genome_obj, genes in sog_dict.items():
+                    if genome_obj.sample_name == g_name:
+                        matching_genes = [g.locus_tag for g in genes]
+                        break
+
+                row.append(",".join(matching_genes) if matching_genes else "")
+            f.write("\t".join(row) + "\n")

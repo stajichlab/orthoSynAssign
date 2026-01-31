@@ -11,8 +11,8 @@ import logging
 import sys
 from pathlib import Path
 
-from orthoSynAssign.lib import read_gtf, read_gff3, read_orthofinder_table
-from orthoSynAssign.lib.parsers import read_gff_folder, read_gtf_folder
+from .lib import read_orthofinder_table
+from .lib.parsers import read_gff_folder, read_gtf_folder, save_results_tsv
 
 
 def setup_logging(verbose: bool = False):
@@ -44,6 +44,15 @@ Examples:
         """,
     )
 
+    # OrthoFinder input
+    parser.add_argument(
+        "-i--og_input",
+        dest="og_input",
+        type=str,
+        required=True,
+        help="Path to OrthoFinder Orthogroups.tsv file",
+    )
+
     # Input format group (mutually exclusive)
     format_group = parser.add_mutually_exclusive_group(required=True)
     format_group.add_argument(
@@ -57,25 +66,41 @@ Examples:
         help="Path to folder containing GTF formatted genome annotation files",
     )
 
-    # OrthoFinder input
     parser.add_argument(
-        "--orthofinder",
-        type=str,
-        required=True,
-        help="Path to OrthoFinder Orthogroups.tsv file",
+        "-w",
+        "--window",
+        dest="window",
+        type=int,
+        default=8,
+        help="Controls how many total genes are considered when determining synteny for a single gene",
+    )
+
+    parser.add_argument(
+        "-r",
+        "--ratio_threshold",
+        dest="ratio_threshold",
+        type=float,
+        default=0.5,
+        help="Controls how many genes within a window must provide synteny support to classify the genes being compared as syntenous",
     )
 
     # Optional arguments
     parser.add_argument(
         "-o",
         "--output",
+        dest="output",
         type=str,
         default="output",
         help="Output directory for results (default: output)",
     )
+
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Enable verbose logging"
+        "--skip_single_orthologs",
+        dest="skip_single_orthologs",
+        action="store_true",
+        help="Output directory for results (default: output)",
     )
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
 
     return parser.parse_args()
 
@@ -102,7 +127,7 @@ def validate_inputs(args):
 
     # Check OrthoFinder file
     if not Path(args.orthofinder).is_file():
-        errors.append(f"OrthoFinder file not found: {args.orthofinder}")
+        errors.append(f"OrthoFinder file not found: {args.og_input}")
 
     if errors:
         for error in errors:
@@ -144,8 +169,8 @@ def main():
             logger.info(f"  {species}: {len(features)} features")
 
         # Read OrthoFinder orthogroups
-        logger.info(f"Reading OrthoFinder data from: {args.orthofinder}")
-        orthogroups = read_orthofinder_table(args.orthofinder)
+        logger.info(f"Reading OrthoFinder data from: {args.og_input}")
+        orthogroups = read_orthofinder_table(args.og_input)
         logger.info(f"Loaded {len(orthogroups)} orthogroups")
 
         # Create output directory
@@ -157,11 +182,33 @@ def main():
         # This is where you would add your synteny analysis, comparison, etc.
         logger.info("Analysis placeholder - implement your analysis logic here")
 
-        # Example: Print summary statistics
-        total_genes_in_orthogroups = sum(
-            len(genes) for og in orthogroups.values() for genes in og.values()
-        )
-        logger.info(f"Total genes in orthogroups: {total_genes_in_orthogroups}")
+        final_sog_results = []
+        global_sog_counter = 1
+
+        for og in orthogroups:
+            # Each 'og' is an instance of the Orthogroup class we built
+            # It handles its own refinement logic internally
+            refined_sogs = og.get_refined_sogs(
+                window_size=args.window, ratio_threshold=args.ratio_threshold, skip_single_ortholog=args.skip_single_orthologs
+            )
+
+            # If refinement results in empty (no syntenic support), skip it
+            if not refined_sogs:
+                continue
+
+            # Store results with a sub-identifier (HOG0001.0, HOG0001.1, etc.)
+            for sog_dict in refined_sogs:
+                # Format as SOG000001, SOG000002, etc.
+                sog_id = f"SOG{global_sog_counter:06d}"
+
+                # Optional: Keep the original HOG ID as metadata in the tuple
+                final_sog_results.append((sog_id, og.og_id, sog_dict))
+                global_sog_counter += 1
+
+        # --- 4. OUTPUT TO TSV ---
+        output_file = "OrthoRefined_SOGs.tsv"
+        save_results_tsv(final_sog_results, output_file)
+        logger.info(f"Refinement complete. Results saved to {output_file}")
 
         logger.info("orthoSynAssign completed successfully")
 

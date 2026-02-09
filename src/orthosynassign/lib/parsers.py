@@ -2,118 +2,153 @@
 File parsers for GTF, GFF3, and OrthoFinder ortholog tables.
 """
 
-import os
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import Any
 import logging
 import gzip
+import re
+
+from abc import ABC, abstractmethod
+
+from ._gene import Protein, Gene, Proteome, Genome
+from ._orthogroup import Orthogroup
 
 logger = logging.getLogger(__name__)
 
 
-class GFFFeature:
-    """Represents a feature from a GFF3/GTF file."""
+class AnnotationParser(ABC):
+    """Abstract base class for genomic annotation parsers."""
 
-    def __init__(
+    def __init__(self, file: str | Path):
+        self.file = Path(file)
+        if not self.file.exists():
+            raise FileNotFoundError(f"Annotation file not found: {self.file}")
+        if not self.file.is_file():
+            raise ValueError(f"Annotation file must be a regular file: {self.file}")
+        self._genome = None
+        self._proteome = None
+
+    def parse(self, *args: Any, **kwargs: Any):
+        """Parse annotation file."""
+        try:
+            opener = gzip.open if self._is_gzip_file() else open
+
+            with opener(self.file, "rt", encoding="utf-8") as f:
+                logger.info(f"Reading annotation file: {self.file}")
+                sample = re.sub(r"\.(bed|gff3?|gtf)(\.gz)?$", "", self.file.name)
+                self._genome = Genome(sample_name=sample)
+                self._proteome = Proteome(sample_name=sample)
+
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+
+                    # Skip empty lines and comments
+                    if not line or line.startswith("#"):
+                        continue
+
+                    self._parser(line_num, line, *args, **kwargs)
+
+            logger.info(f"Loaded {len(self._genome)} features from {self.file}")
+        except Exception:
+            self._genome = None
+            self._proteome = None
+            raise
+
+        return self._genome
+
+    @abstractmethod
+    def _parser(self, line_num: int, line: str, *args: Any, **kwargs: Any):
+        pass
+
+    def _is_gzip_file(self) -> bool:
+        """Checks whether a file is in gzip format.
+
+        This function reads the first two bytes of the file and checks if they match the gzip magic number.
+
+        Args:
+            file (str | Path): The path to the file to check.
+
+        Returns:
+            bool: True if the file is in gzip format, False otherwise.
+        """
+        with open(self.file, "rb") as f:
+            magic_number = f.read(2)
+        return magic_number == b"\x1f\x8b"
+
+
+class BedParser(AnnotationParser):
+    def _parser(self, line_num: int, line: str):
+        fields = line.split("\t")
+        if len(fields) != 4:
+            raise ValueError(f"Line {line_num}: Expected 4 fields, got {len(fields)}")
+        (seqid, start, end, name) = fields
+        self._genome.add_gene(Gene(seqid=seqid, start=int(start), end=int(end), id=name))
+
+
+class _GFFGTFParser(AnnotationParser):
+    """
+    Abstract base class for GFF and GTF parsers.
+    """
+
+    def parse(
         self,
-        seqid: str,
-        source: str,
-        feature_type: str,
-        start: int,
-        end: int,
-        score: Optional[str],
-        strand: str,
-        phase: str,
-        attributes: Dict[str, str],
+        gene_parser: dict[str, str] = {"feature_type": ["gene"], "ID": "locus_tag"},
+        protein_parser: dict[str, str] = {"feature_type": ["CDS"], "ID": "protein_id"},
+        *args,
+        **kwargs,
     ):
-        self.seqid = seqid
-        self.source = source
-        self.type = feature_type
-        self.start = start
-        self.end = end
-        self.score = score
-        self.strand = strand
-        self.phase = phase
-        self.attributes = attributes
+        self._g_par = gene_parser
+        self._p_par = protein_parser
+        self._last_gene = None
+        return super().parse(*args, **kwargs)
 
-    def __repr__(self):
-        return f"GFFFeature({self.seqid}:{self.start}-{self.end} {self.strand} {self.type})"
+    def _parser(
+        self,
+        line_num: int,
+        line: str,
+        *args,
+        **kwargs,
+    ):
+        fields = line.split("\t")
+        if len(fields) != 9:
+            raise ValueError(f"Line {line_num}: Expected 9 fields, got {len(fields)}")
+        (
+            seqid,
+            _,
+            feature_type,
+            start,
+            end,
+            _,
+            _,
+            _,
+            attributes,
+        ) = fields
 
+        try:
+            if feature_type in self._g_par["feature_type"]:
+                id = self._attrs_parser(attributes, parsed_key=self._g_par["ID"])
+                gene = Gene(seqid=seqid, id=id, start=start, end=end)
+                self._genome.add_gene(gene)
+                self._last_gene = gene
+            elif feature_type in self._p_par["feature_type"]:
+                id = self._attrs_parser(attributes, parsed_key=self._p_par["ID"])
+                protein = Protein(protein_id=id)
+                protein.gene = self._last_gene if self._last_gene else None
+                self._proteome.add_protein(protein)
 
-def check_add_gene_features(features: List[GFFFeature]) -> List[GFFFeature]:
-    """
-    Check if gene features exist, and add them if missing.
+        except ValueError as e:
+            raise ValueError(f"Line {line_num}: Error parsing attributes - {e}")
 
-    If there are no 'gene' type features but there are 'exon' features,
-    this function will create gene features by grouping exons by gene_id
-    and finding the min/max coordinates.
-
-    Args:
-        features: List of GFFFeature objects
-
-    Returns:
-        List of GFFFeature objects, with gene features added if necessary
-    """
-    # Check if there are any gene type features
-    has_gene_features = any(f.type == "gene" for f in features)
-
-    if has_gene_features:
-        logger.info("Gene features already present, returning unchanged")
-        return features
-
-    # Build dictionary of exons grouped by gene_id
-    gene_groups = {}
-    for feature in features:
-        if feature.type == "exon":
-            if (
-                gene_id := feature.attributes.get("gene_id")
-                or feature.attributes.get("name")
-                or feature.attributes.get("ID")
-                or feature.attributes.get("Name")
-            ):
-                if gene_id not in gene_groups:
-                    gene_groups[gene_id] = []
-                gene_groups[gene_id].append(feature)
-
-    if not gene_groups:
-        logger.info("No exon features with gene_id found, returning unchanged")
-        return features
-
-    # Create gene features from grouped exons
-    new_gene_features = []
-    for gene_id, exons in gene_groups.items():
-        min_start = min(exon.start for exon in exons)
-        max_end = max(exon.end for exon in exons)
-
-        # Use attributes from first exon as template
-        first_exon = exons[0]
-        gene_attributes = {"ID": gene_id, "gene_id": gene_id}
-
-        # Copy relevant attributes from the exon if they exist
-        for key in ["Name", "name", "description", "biotype"]:
-            if key in first_exon.attributes:
-                gene_attributes[key] = first_exon.attributes[key]
-
-        gene_feature = GFFFeature(
-            seqid=first_exon.seqid,
-            source=first_exon.source,
-            feature_type="gene",
-            start=min_start,
-            end=max_end,
-            score=None,
-            strand=first_exon.strand,
-            phase=".",
-            attributes=gene_attributes,
-        )
-        new_gene_features.append(gene_feature)
-
-    logger.info(f"Created {len(new_gene_features)} gene features from exons")
-
-    # Return combined list with new gene features at the beginning
-    return new_gene_features + features
+    @abstractmethod
+    def _attrs_parser(self, attr_string, parsed_key):
+        """
+        Abstract method to parse the attributes string for a specific file format.
+        Subclasses must implement this method to parse the attributes.
+        """
+        pass
 
 
-def parse_gff3_attributes(attr_string: str) -> Dict[str, str]:
+class GFFParser(_GFFGTFParser):
     """
     Parse GFF3 attributes field.
 
@@ -125,20 +160,21 @@ def parse_gff3_attributes(attr_string: str) -> Dict[str, str]:
     Returns:
         Dictionary of attribute key-value pairs
     """
-    attributes = {}
-    if not attr_string or attr_string == ".":
-        return attributes
 
-    for item in attr_string.split(";"):
-        item = item.strip()
-        if "=" in item:
-            key, value = item.split("=", 1)
-            attributes[key] = value
+    def _attrs_parser(self, attr_string, parsed_key):
+        if not attr_string or attr_string == ".":
+            return None
 
-    return attributes
+        for item in attr_string.split(";"):
+            item = item.strip()
+            if "=" in item:
+                key, value = item.split("=", 1)
+                if key == parsed_key:
+                    return value
+        return None
 
 
-def parse_gtf_attributes(attr_string: str) -> Dict[str, str]:
+class GTFParser(_GFFGTFParser):
     """
     Parse GTF attributes field.
 
@@ -150,166 +186,22 @@ def parse_gtf_attributes(attr_string: str) -> Dict[str, str]:
     Returns:
         Dictionary of attribute key-value pairs
     """
-    attributes = {}
-    if not attr_string or attr_string == ".":
-        return attributes
 
-    # Split by semicolon and process each key-value pair
-    for item in attr_string.split(";"):
-        item = item.strip()
-        if item:
-            parts = item.split(None, 1)  # Split on first whitespace
-            if len(parts) == 2:
-                key = parts[0]
-                value = parts[1].strip('"')  # Remove quotes
-                attributes[key] = value
-
-    return attributes
+    def _attrs_parser(self, attr_string, parsed_key):
+        # Split by semicolon and process each key-value pair
+        for item in attr_string.split(";"):
+            item = item.strip()
+            if item:
+                parts = item.split(None, 1)  # Split on first whitespace
+                if len(parts) == 2:
+                    key = parts[0]
+                    value = parts[1].strip('"')  # Remove quotes
+                    if key == parsed_key:
+                        return value
+        return None
 
 
-def read_gff3(file_path: str) -> List[GFFFeature]:
-    """
-    Read a GFF3 formatted genome annotation file.
-
-    Args:
-        file_path: Path to the GFF3 file
-
-    Returns:
-        List of GFFFeature objects
-
-    Raises:
-        FileNotFoundError: If the file doesn't exist
-        ValueError: If the file format is invalid
-    """
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"GFF3 file not found: {file_path}")
-
-    features = []
-    logger.info(f"Reading GFF3 file: {file_path}")
-
-    if file_path.endswith(".gz"):
-        f = gzip.open(file_path, "rt", encoding="utf-8")
-    else:
-        f = open(file_path, "r", encoding="utf-8")
-    with f:
-        for line_num, line in enumerate(f, 1):
-            line = line.strip()
-
-            # Skip empty lines and comments
-            if not line or line.startswith("#"):
-                continue
-
-            # Parse the line
-            fields = line.split("\t")
-            if len(fields) != 9:
-                logger.warning(f"Line {line_num}: Expected 9 fields, got {len(fields)}")
-                continue
-
-            (
-                seqid,
-                source,
-                feature_type,
-                start,
-                end,
-                score,
-                strand,
-                phase,
-                attributes,
-            ) = fields
-
-            try:
-                feature = GFFFeature(
-                    seqid=seqid,
-                    source=source,
-                    feature_type=feature_type,
-                    start=int(start),
-                    end=int(end),
-                    score=score if score != "." else None,
-                    strand=strand,
-                    phase=phase,
-                    attributes=parse_gff3_attributes(attributes),
-                )
-                features.append(feature)
-            except ValueError as e:
-                logger.warning(f"Line {line_num}: Error parsing coordinates - {e}")
-                continue
-
-    logger.info(f"Loaded {len(features)} features from {file_path}")
-    return features
-
-
-def read_gtf(file_path: str) -> List[GFFFeature]:
-    """
-    Read a GTF formatted genome annotation file.
-
-    Args:
-        file_path: Path to the GTF file
-
-    Returns:
-        List of GFFFeature objects
-
-    Raises:
-        FileNotFoundError: If the file doesn't exist
-        ValueError: If the file format is invalid
-    """
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"GTF file not found: {file_path}")
-
-    features = []
-    logger.info(f"Reading GTF file: {file_path}")
-
-    if file_path.endswith(".gz"):
-        f = gzip.open(file_path, "rt", encoding="utf-8")
-    else:
-        f = open(file_path, "r", encoding="utf-8")
-    with f:
-        for line_num, line in enumerate(f, 1):
-            line = line.strip()
-
-            # Skip empty lines and comments
-            if not line or line.startswith("#"):
-                continue
-
-            # Parse the line
-            fields = line.split("\t")
-            if len(fields) != 9:
-                logger.warning(f"Line {line_num}: Expected 9 fields, got {len(fields)}")
-                continue
-
-            (
-                seqid,
-                source,
-                feature_type,
-                start,
-                end,
-                score,
-                strand,
-                phase,
-                attributes,
-            ) = fields
-
-            try:
-                feature = GFFFeature(
-                    seqid=seqid,
-                    source=source,
-                    feature_type=feature_type,
-                    start=int(start),
-                    end=int(end),
-                    score=score if score != "." else None,
-                    strand=strand,
-                    phase=phase,
-                    attributes=parse_gtf_attributes(attributes),
-                )
-                features.append(feature)
-            except ValueError as e:
-                logger.warning(f"Line {line_num}: Error parsing coordinates - {e}")
-                continue
-
-    logger.info(f"Loaded {len(features)} features from {file_path}")
-    return features
-
-
-def read_orthofinder_table(file_path: str) -> Dict[str, Dict[str, List[str]]]:
+def read_orthofinder_table(file: str, genomes: dict[str, Genome]) -> list[Orthogroup]:
     """
     Read an OrthoFinder Orthogroups.tsv file.
 
@@ -334,25 +226,33 @@ def read_orthofinder_table(file_path: str) -> Dict[str, Dict[str, List[str]]]:
         FileNotFoundError: If the file doesn't exist
         ValueError: If the file format is invalid
     """
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"OrthoFinder file not found: {file_path}")
+    file: Path = Path(file)
 
-    orthogroups = {}
-    logger.info(f"Reading OrthoFinder table: {file_path}")
+    orthogroups = []
+    logger.info(f"Reading Orthogroup file: {file}")
 
-    if file_path.endswith(".gz"):
-        f = gzip.open(file_path, "rt", encoding="utf-8")
-    else:
-        f = open(file_path, "r", encoding="utf-8")
-    with f:
+    with open(file, "r", encoding="utf-8") as f:
         # Read header to get species names
         header = f.readline().strip().split("\t")
-        if len(header) < 2:
-            raise ValueError("Invalid OrthoFinder file: expected at least 2 columns")
+        if len(header) < 3:
+            raise ValueError("Invalid Orthogroup file: expected at least 3 columns")
 
-        # First column is "Orthogroup", rest are species names
-        species_names = header[1:]
-        logger.info(f"Found {len(species_names)} species: {', '.join(species_names)}")
+        # First column is "Orthogroup", rest are sample names
+        samples = header[1:]
+        logger.info("Found %s samples: %s", len(samples), ", ".join(samples))
+        if genomes:
+            sample_set = set(header[1:])
+            genome_keys = set(genomes.keys())
+
+            # Find the difference
+            missing = sample_set - genome_keys
+
+            if missing:
+                raise ValueError(
+                    f"The following samples were not found in loaded genomes: {', '.join(missing)}\n"
+                    "Please check whether the samples in the orthogroup file match to the gff files.\n"
+                    f"{genome_keys}"
+                )
 
         # Read orthogroup data
         for line_num, line in enumerate(f, 2):  # Start at 2 since we read header
@@ -365,81 +265,28 @@ def read_orthofinder_table(file_path: str) -> Dict[str, Dict[str, List[str]]]:
                 logger.warning(f"Line {line_num}: Expected {len(header)} fields, got {len(fields)}")
                 continue
 
-            orthogroup_id = fields[0]
-            orthogroups[orthogroup_id] = {}
+            orthogroup = Orthogroup(fields[0])
 
-            # Parse genes for each species
-            for i, species in enumerate(species_names, 1):
+            # Parse genes for each sample
+            for i, sample in enumerate(samples, 1):
+                if genomes:
+                    genome = genomes[sample]
+                else:
+                    genome = Genome(sample)
                 genes_str = fields[i].strip()
                 if genes_str:
                     # Genes are usually separated by commas or spaces
                     genes = [g.strip() for g in genes_str.replace(",", " ").split() if g.strip()]
-                    orthogroups[orthogroup_id][species] = genes
-                else:
-                    orthogroups[orthogroup_id][species] = []
+                    for gene in genes:
+                        orthogroup.add_gene(genome[gene])
 
-    logger.info(f"Loaded {len(orthogroups)} orthogroups from {file_path}")
+            orthogroups.append(orthogroup)
+
+    logger.info(f"Loaded {len(orthogroups)} orthogroups from {file}")
     return orthogroups
 
 
-def read_gff_folder(folder_path: str, file_extension: str = ".gff") -> Dict[str, List[GFFFeature]]:
-    """
-    Read all GFF3 files from a folder.
-
-    Args:
-        folder_path: Path to folder containing GFF3 files
-        file_extension: File extension to filter (default: .gff3)
-
-    Returns:
-        Dictionary mapping file names (without extension) to lists of features
-    """
-    if not os.path.isdir(folder_path):
-        raise NotADirectoryError(f"Not a directory: {folder_path}")
-
-    results = {}
-    folder = Path(folder_path)
-    for file_path in folder.glob(f"*{file_extension}*"):
-        if file_path.is_file() and (
-            file_path.name.endswith(file_extension)
-            or file_path.name.endswith(f"{file_extension}3")
-            or file_path.name.endswith(f"{file_extension}3.gz")
-            or file_path.name.endswith(f"{file_extension}.gz")
-        ):
-            species_name = file_path.stem
-            results[species_name] = read_gff3(str(file_path))
-
-    logger.info(f"Loaded annotations for {len(results)} species from {folder_path}")
-    return results
-
-
-def read_gtf_folder(folder_path: str, file_extension: str = ".gtf") -> Dict[str, List[GFFFeature]]:
-    """
-    Read all GTF files from a folder.
-
-    Args:
-        folder_path: Path to folder containing GTF files
-        file_extension: File extension to filter (default: .gtf)
-
-    Returns:
-        Dictionary mapping file names (without extension) to lists of features
-    """
-    if not os.path.isdir(folder_path):
-        raise NotADirectoryError(f"Not a directory: {folder_path}")
-
-    results = {}
-    folder = Path(folder_path)
-
-    for file_path in folder.glob(f"*{file_extension}*"):
-        if file_path.is_file() and (file_path.name.endswith(file_extension) or file_path.name.endswith(f"{file_extension}.gz")):
-            species_name = file_path.stem
-            logger.info(f"Reading {species_name} from {file_path}")
-            results[species_name] = read_gtf(str(file_path))
-
-    logger.info(f"Loaded annotations for {len(results)} species from {folder_path}")
-    return results
-
-
-def save_results_tsv(results, filename):
+def save_results_tsv(results: list[tuple[str, dict[Genome, list[Gene]]]], filename):
     """
     Format: SOG_ID \t Genome_A \t Genome_B \t ...
     Where cells contain comma-separated locus_tags.
@@ -464,7 +311,7 @@ def save_results_tsv(results, filename):
                 matching_genes = []
                 for genome_obj, genes in sog_dict.items():
                     if genome_obj.sample_name == g_name:
-                        matching_genes = [g.locus_tag for g in genes]
+                        matching_genes = [g.id for g in genes]
                         break
 
                 row.append(",".join(matching_genes) if matching_genes else "")

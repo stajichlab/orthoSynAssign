@@ -6,7 +6,7 @@ from collections import defaultdict, deque
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ._gene import Gene, Genome
+    from ._gene import Protein, Gene, Genome
 
 
 class Orthogroup:
@@ -28,10 +28,14 @@ class Orthogroup:
         return iter(self._genes)
 
     def add_gene(self, gene_obj: Gene):
-        gene_obj.orthogroup = self
-        self._genes.append(gene_obj)
+        if gene_obj not in self._genes:
+            gene_obj.orthogroup = self
+            self._genes.append(gene_obj)
 
-    def get_species_present(self):
+    def add_protein(self, protein_obj: Protein):
+        self.add_gene(protein_obj.gene)
+
+    def get_samples(self):
         return {gene.genome for gene in self}
 
     def has_paralogs(self):
@@ -154,7 +158,7 @@ def _calculate_synteny_ratio(win_a: list[str], win_b: list[str]) -> float:
     return matches / denominator
 
 
-def _consolidate_into_sogs(pairs):
+def _consolidate_into_sogs(pairs: list[tuple[Gene, Gene]]):
     """
     Standard Connected Components algorithm to cluster genes.
     Expects a list of gene pairs: [(gene1, gene2), (gene3, gene4), ...]

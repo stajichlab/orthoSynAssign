@@ -6,13 +6,19 @@ Main program for analyzing orthologous groups and synteny using OrthoFinder
 results and genome annotation files (GFF3/GTF).
 """
 
+from __future__ import annotations
+
 import argparse
 import logging
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from .lib import read_orthofinder_table
-from .lib.parsers import read_gff_folder, read_gtf_folder, save_results_tsv
+from .lib.parsers import BedParser, GFFParser, GTFParser, read_orthofinder_table, save_results_tsv
+
+
+if TYPE_CHECKING:
+    from .lib.parsers import AnnotationParser
 
 
 def setup_logging(verbose: bool = False):
@@ -34,21 +40,22 @@ def parse_arguments():
         epilog="""
 Examples:
   # Using GFF3 files
-  orthoSynAssign.py --gff_folder annotations/ --orthofinder Orthogroups.tsv
+  orthoSynAssign.py --gff annotations/ --orthofinder Orthogroups.tsv
 
   # Using GTF files
-  orthoSynAssign.py --gtf_folder gtf_files/ --orthofinder Orthogroups.tsv
+  orthoSynAssign.py --gtf gtf_files/ --orthofinder Orthogroups.tsv
 
   # With verbose output
-  orthoSynAssign.py --gff_folder annotations/ --orthofinder Orthogroups.tsv -v
+  orthoSynAssign.py --gff annotations/ --orthofinder Orthogroups.tsv -v
         """,
     )
 
     # OrthoFinder input
     parser.add_argument(
-        "-i--og_input",
+        "-i",
+        "--og_input",
         dest="og_input",
-        type=str,
+        type=Path,
         required=True,
         help="Path to OrthoFinder Orthogroups.tsv file",
     )
@@ -56,14 +63,25 @@ Examples:
     # Input format group (mutually exclusive)
     format_group = parser.add_mutually_exclusive_group(required=True)
     format_group.add_argument(
-        "--gff_folder",
-        type=str,
-        help="Path to folder containing GFF3 formatted genome annotation files",
+        "--bed",
+        type=Path,
+        metavar=("file", "files"),
+        nargs="+",
+        help="Path of BED formatted genome annotation files",
     )
     format_group.add_argument(
-        "--gtf_folder",
-        type=str,
-        help="Path to folder containing GTF formatted genome annotation files",
+        "--gff",
+        type=Path,
+        metavar=("file", "files"),
+        nargs="+",
+        help="Path of GFF3 formatted genome annotation files",
+    )
+    format_group.add_argument(
+        "--gtf",
+        type=Path,
+        metavar=("file", "files"),
+        nargs="+",
+        help="Path of GTF formatted genome annotation files",
     )
 
     parser.add_argument(
@@ -89,52 +107,56 @@ Examples:
         "-o",
         "--output",
         dest="output",
-        type=str,
-        default="output",
-        help="Output directory for results (default: output)",
+        type=Path,
+        default="OrthoRefined_SOGs.tsv",
+        help="Output of results",
     )
 
     parser.add_argument(
         "--skip_single_orthologs",
         dest="skip_single_orthologs",
         action="store_true",
-        help="Output directory for results (default: output)",
+        help="Skip single orthologs",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
 
     return parser.parse_args()
 
 
-def validate_inputs(args):
+def _validate_annotations(args, logger) -> list[AnnotationParser]:
     """
     Validate input files and directories.
 
     Args:
         args: Parsed command line arguments
-
-    Returns:
-        True if all inputs are valid, False otherwise
     """
-    errors = []
+    # Check annotation files
+    if args.bed:
+        files = args.bed
+        parser = BedParser
+    elif args.gff:
+        files = args.gff
+        parser = GFFParser
+    else:
+        files = args.gtf
+        parser = GTFParser
 
-    # Check annotation folder
-    if args.gff_folder:
-        if not Path(args.gff_folder).is_dir():
-            errors.append(f"GFF folder not found: {args.gff_folder}")
-    elif args.gtf_folder:
-        if not Path(args.gtf_folder).is_dir():
-            errors.append(f"GTF folder not found: {args.gtf_folder}")
+    annotations = []
+    for file in files:
+        logger.debug(f"Reading annotation from: {file}")
+        annotations.append(parser(file))
 
+    return annotations
+
+
+def _validate_orthogroup(args) -> Path:
     # Check OrthoFinder file
-    if not Path(args.orthofinder).is_file():
-        errors.append(f"OrthoFinder file not found: {args.og_input}")
-
-    if errors:
-        for error in errors:
-            logging.error(error)
-        return False
-
-    return True
+    file = Path(args.og_input)
+    if not file.exists():
+        raise FileNotFoundError(f"Orthogroup file not found: {file}")
+    if not file.is_file():
+        raise ValueError(f"Orthogroup file must be a regular file: {file}")
+    return file
 
 
 def main():
@@ -149,37 +171,28 @@ def main():
     logger.info("Starting orthoSynAssign")
     logger.info(f"Command: {' '.join(sys.argv)}")
 
-    # Validate inputs
-    if not validate_inputs(args):
-        logger.error("Input validation failed. Exiting.")
-        sys.exit(1)
-
     try:
-        # Read annotation files
-        annotations = {}
-        if args.gff_folder:
-            logger.info(f"Reading GFF3 files from: {args.gff_folder}")
-            annotations = read_gff_folder(args.gff_folder)
-        elif args.gtf_folder:
-            logger.info(f"Reading GTF files from: {args.gtf_folder}")
-            annotations = read_gtf_folder(args.gtf_folder)
+        # Validate inputs
+        annotations = _validate_annotations(args, logger)
+        og_file = _validate_orthogroup(args)
 
-        logger.info(f"Loaded annotations for {len(annotations)} species")
-        for species, features in annotations.items():
-            logger.info(f"  {species}: {len(features)} features")
+        # Read gff
+        genomes = {}
+        for annotation in annotations:
+            genome = annotation.parse()
+            genomes[genome.sample_name] = genome
 
         # Read OrthoFinder orthogroups
-        logger.info(f"Reading OrthoFinder data from: {args.og_input}")
-        orthogroups = read_orthofinder_table(args.og_input)
+        logger.info(f"Reading OrthoFinder data from: {og_file}")
+        orthogroups = read_orthofinder_table(og_file, genomes)
         logger.info(f"Loaded {len(orthogroups)} orthogroups")
 
-        # Create output directory
-        output_dir = Path(args.output)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Output directory: {output_dir}")
+        # # Create output directory
+        # output_dir = Path(args.output)
+        # output_dir.mkdir(parents=True, exist_ok=True)
+        # logger.info(f"Output directory: {output_dir}")
 
-        # TODO: Implement analysis logic here
-        # This is where you would add your synteny analysis, comparison, etc.
+        # Perform synteny analysis
         logger.info("Analysis placeholder - implement your analysis logic here")
 
         final_sog_results = []
@@ -202,13 +215,12 @@ def main():
                 sog_id = f"SOG{global_sog_counter:06d}"
 
                 # Optional: Keep the original HOG ID as metadata in the tuple
-                final_sog_results.append((sog_id, og.og_id, sog_dict))
+                final_sog_results.append((f"{sog_id}.{og.og_id}", sog_dict))
                 global_sog_counter += 1
 
         # --- 4. OUTPUT TO TSV ---
-        output_file = "OrthoRefined_SOGs.tsv"
-        save_results_tsv(final_sog_results, output_file)
-        logger.info(f"Refinement complete. Results saved to {output_file}")
+        save_results_tsv(final_sog_results, args.output)
+        logger.info(f"Refinement complete. Results saved to {args.output}")
 
         logger.info("orthoSynAssign completed successfully")
 

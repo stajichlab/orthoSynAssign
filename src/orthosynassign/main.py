@@ -12,13 +12,15 @@ import sys
 import textwrap
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterator
 
 from . import AUTHOR, VERSION
 from . import __doc__ as _module_doc
 from .lib.parsers import BedParser, read_orthofinder_table, save_results_tsv
 
 if TYPE_CHECKING:
+    from .lib._gene import Gene, Genome
+    from .lib._orthogroup import Orthogroup
     from .lib.parsers import AnnotationParser
 
 _EPILOG = textwrap.dedent(f"""\
@@ -78,30 +80,9 @@ def main():
 
         # Perform synteny analysis
         logger.info("Refining orthogroups by pairwise synteny analysis.")
+        results_stream = _generate_sog_results(orthogroups, args.window, args.ratio_threshold)
 
-        final_sog_results = []
-        global_sog_counter = 1
-
-        for og in orthogroups:
-            # Each 'og' is an instance of the Orthogroup class we built
-            # It handles its own refinement logic internally
-            refined_sogs = og.get_refined_sogs(
-                window_size=args.window, ratio_threshold=args.ratio_threshold, skip_single_ortholog=args.skip_single_orthologs
-            )
-
-            # If refinement results in empty (no syntenic support), skip it
-            if not refined_sogs:
-                continue
-
-            # Store results with an identifier
-            for sog_dict in refined_sogs:
-                # Format as SOG000001, SOG000002, etc.
-                sog_id = f"SOG{global_sog_counter:06d}"
-
-                final_sog_results.append((f"{sog_id}.{og.og_id}", sog_dict))
-                global_sog_counter += 1
-
-        save_results_tsv(final_sog_results, args.output)
+        save_results_tsv(results_stream, list(genomes.keys()), args.output)
         logger.info(f"Refinement complete. Results saved to {args.output}")
 
         logger.info("orthoSynAssign completed successfully")
@@ -204,6 +185,38 @@ def _parse_arguments():
     return parser.parse_args()
 
 
+def _generate_sog_results(
+    orthogroups: list[Orthogroup], window_size, ratio_threshold, *, skip_single_ortholog=False
+) -> Iterator[tuple[str, dict[Genome, list[Gene]]]]:
+    """
+    Logic-only: Processes orthogroups and yields results one by one.
+    """
+    global_sog_counter = 1
+
+    for og in orthogroups:
+        refined_sogs = og.get_refined_sogs(
+            window_size=window_size, ratio_threshold=ratio_threshold, skip_single_ortholog=skip_single_ortholog
+        )
+
+        if not refined_sogs:
+            continue
+
+        for sog_dict in refined_sogs:
+            sog_id = f"SOG{global_sog_counter:06d}.{og.og_id}"
+            yield sog_id, sog_dict
+            global_sog_counter += 1
+
+
+def _setup_logging(verbose: bool = False):
+    """Configure logging for the application."""
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+
 def _validate_annotations(args, logger) -> list[AnnotationParser]:
     """
     Validate input files and directories.
@@ -232,16 +245,6 @@ def _validate_orthogroup(args) -> Path:
     if not file.is_file():
         raise ValueError(f"Orthogroup file must be a regular file: {file}")
     return file
-
-
-def _setup_logging(verbose: bool = False):
-    """Configure logging for the application."""
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
 
 
 if __name__ == "__main__":

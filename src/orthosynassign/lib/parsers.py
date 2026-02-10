@@ -9,7 +9,7 @@ import logging
 import re
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from ._gene import Gene, Genome, Protein, Proteome
 from ._orthogroup import Orthogroup
@@ -287,24 +287,20 @@ def read_orthofinder_table(file: str, genomes: dict[str, Genome]) -> list[Orthog
     return orthogroups
 
 
-def save_results_tsv(results: list[tuple[str, dict[Genome, list[Gene]]]], filename):
+def save_results_tsv(
+    results_gen: Iterator[tuple[str, dict[Genome, list[Gene]]]], all_genomes: list[str], filename: str | Path
+) -> None:
     """
     Format: SOG_ID \t Genome_A \t Genome_B \t ...
     Where cells contain comma-separated locus_tags.
     """
-    if not results:
-        return
-
-    # Determine all unique genomes across all results for header
-    all_genomes = sorted(list({g.sample_name for _, sog in results for g in sog.keys()}))
-
-    with open(filename, "w") as f:
+    with open(filename, "w", encoding="utf-8") as f:
         # Write Header
         header = ["SOG_ID"] + all_genomes
         f.write("\t".join(header) + "\n")
 
         # Write Rows
-        for sog_id, sog_dict in results:
+        for sog_id, sog_dict in results_gen:
             row = [sog_id]
             for g_name in all_genomes:
                 # Find the genome object that matches the name

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from itertools import combinations
 from collections import defaultdict, deque
-
+from itertools import combinations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ._gene import Protein, Gene, Genome
+    from ._gene import Gene, Genome, Protein
 
 
 class Orthogroup:

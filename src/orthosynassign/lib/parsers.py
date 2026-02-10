@@ -2,15 +2,16 @@
 File parsers for GTF, GFF3, and OrthoFinder ortholog tables.
 """
 
+from __future__ import annotations
+
+import gzip
+import logging
+import re
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
-import logging
-import gzip
-import re
 
-from abc import ABC, abstractmethod
-
-from ._gene import Protein, Gene, Proteome, Genome
+from ._gene import Gene, Genome, Protein, Proteome
 from ._orthogroup import Orthogroup
 
 logger = logging.getLogger(__name__)

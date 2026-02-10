@@ -59,7 +59,8 @@ method = "git"
 default-tag = "0.0.0"
 
 [tool.ruff]
-line-length = 120
+line-length = 130
 
 [tool.ruff.lint]
+select = ["E", "F", "I"]
 ignore = ["E203", "E402", "E701"]

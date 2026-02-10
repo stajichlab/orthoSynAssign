@@ -1,11 +1,14 @@
 """
 orthoSynAssign - Ortholog Synteny Assignment Tool
 
-A tool for analyzing orthologous groups and synteny using OrthoFinder or other tool results
-and genome annotation files (GFF3/GTF).
+Refine OrthoFinder orthologous groups with synteny analysis using genome annotations.
 """
 
+import logging
 from importlib.metadata import metadata
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 VERSION = metadata("orthosynassign")["Version"]
 AUTHOR = metadata("orthosynassign")["Author-email"]

@@ -7,12 +7,18 @@ from __future__ import annotations
 
 import argparse
 import logging
+import multiprocessing
+import os
 import re
 import sys
 import textwrap
 import time
+import traceback
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator
+
+from tqdm import tqdm
 
 from . import AUTHOR, VERSION
 from . import __doc__ as _module_doc
@@ -44,11 +50,15 @@ orthosynassign -i orthogroup.tsv --bed *.bed -v
 Written by {AUTHOR}
 """)
 
+_WORKER_OGS: list[Orthogroup] = []
+_WORKER_GENOME_MAP: dict[str, Genome] = {}
+_AVAIL_CPUS = int(os.environ.get("SLURM_CPUS_ON_NODE", os.cpu_count()))
 
-def main():
+
+def main(args: list[str] | None = None) -> int:
     """Main entry point for orthoSynAssign."""
     # Parse arguments
-    args = _parse_arguments()
+    args = _parse_arguments() or sys.argv[1:]
 
     # Setup logging
     _setup_logging(args.verbose)
@@ -80,16 +90,23 @@ def main():
 
         # Perform synteny analysis
         logger.info("Refining orthogroups by pairwise synteny analysis.")
-        results_stream = _generate_sog_results(orthogroups, args.window, args.ratio_threshold)
+        results_stream = _generate_sog_results(orthogroups, genomes, args, cpus=args.threads)
 
         save_results_tsv(results_stream, list(genomes.keys()), args.output)
         logger.info(f"Refinement complete. Results saved to {args.output}")
 
         logger.info("orthoSynAssign completed successfully")
 
+    except KeyboardInterrupt:
+        logger.warning("Terminated by user.")
+        return 1
+
     except Exception as e:
         logger.error(f"An error occurred: {e}")
-        sys.exit(1)
+        logger.debug("%s", traceback.format_exc())
+        return 1
+
+    return 0
 
 
 class _CustomHelpFormatter(argparse.RawDescriptionHelpFormatter):
@@ -172,39 +189,18 @@ def _parse_arguments():
         help="Output of results (default: Refined_SOGs-[YYYYMMDD-HHMMSS].tsv (UTC timestamp))",
     )
 
-    # opt_args.add_argument(
-    #     "--skip_single_orthologs",
-    #     dest="skip_single_orthologs",
-    #     action="store_true",
-    #     help="Skip single orthologs",
-    # )
+    opt_args.add_argument(
+        "--skip_single_orthologs",
+        dest="skip_single_orthologs",
+        action="store_true",
+        help="Skip single orthologs",
+    )
+    opt_args.add_argument("-t", "--threads", type=int, default=min(_AVAIL_CPUS, 4), help="Number of cpus to use")
     opt_args.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
     opt_args.add_argument("-V", "--version", action="version", version=VERSION)
     opt_args.add_argument("-h", "--help", action="help", help="show this help message and exit")
 
     return parser.parse_args()
-
-
-def _generate_sog_results(
-    orthogroups: list[Orthogroup], window_size, ratio_threshold, *, skip_single_ortholog=False
-) -> Iterator[tuple[str, dict[Genome, list[Gene]]]]:
-    """
-    Logic-only: Processes orthogroups and yields results one by one.
-    """
-    global_sog_counter = 1
-
-    for og in orthogroups:
-        refined_sogs = og.get_refined_sogs(
-            window_size=window_size, ratio_threshold=ratio_threshold, skip_single_ortholog=skip_single_ortholog
-        )
-
-        if not refined_sogs:
-            continue
-
-        for sog_dict in refined_sogs:
-            sog_id = f"SOG{global_sog_counter:06d}.{og.og_id}"
-            yield sog_id, sog_dict
-            global_sog_counter += 1
 
 
 def _setup_logging(verbose: bool = False):
@@ -245,6 +241,92 @@ def _validate_orthogroup(args) -> Path:
     if not file.is_file():
         raise ValueError(f"Orthogroup file must be a regular file: {file}")
     return file
+
+
+def _generate_sog_results(
+    orthogroups: list[Orthogroup], genome_data: dict[str, Genome], args, *, cpus: int = 1
+) -> Iterator[tuple[str, dict[Genome, list[Gene]]]]:
+    """
+    Logic-only: Processes orthogroups and yields results one by one.
+    """
+    global_sog_counter = 1
+    total_ogs = len(orthogroups)
+    indices = list(range(total_ogs))
+    desc = f"Processing with {cpus} cpu{'s' if cpus > 1 else ''}"
+
+    if cpus == 1:
+        _init_worker(orthogroups, genome_data)
+
+        for index in tqdm(indices, desc=desc, unit="og"):
+            _, refined_sogs = _process_og_task(index, args)
+
+            for sog_dict in refined_sogs:
+                sog_id = f"SOG{global_sog_counter:06d}.{orthogroups[index].og_id}"
+                yield sog_id, sog_dict
+                global_sog_counter += 1
+        return
+
+    # Use 'spawn' to ensure Windows compatibility
+    ctx = multiprocessing.get_context("spawn")
+
+    opt_chunksize = _calculate_optimal_chunksize(total_ogs, cpus)
+    # Start the Pool with the shared memory pointer
+    pool = ctx.Pool(processes=cpus, initializer=_init_worker, initargs=(orthogroups, genome_data))
+
+    try:
+        # Pass the (og, args) tuple to imap_unordered
+        worker_func = partial(_process_og_task, args=args)
+
+        pbar = tqdm(pool.imap(worker_func, indices, chunksize=opt_chunksize), total=total_ogs, desc=desc, unit="og")
+
+        for og_id, refined_sogs in pbar:
+            for sog_dict in refined_sogs:
+                sog_id_str = f"SOG{global_sog_counter:06d}.{og_id}"
+                yield sog_id_str, sog_dict
+                global_sog_counter += 1
+
+    finally:
+        pool.close()
+        pool.join()
+
+
+def _init_worker(ogs: list[Orthogroup], genome_map: dict[str, Genome]):
+    """
+    Initializes each worker by mapping the shared memory segment.
+    This runs once per CPU core.
+    """
+    global _WORKER_OGS, _WORKER_GENOME_MAP
+    _WORKER_OGS = ogs
+    _WORKER_GENOME_MAP = genome_map
+
+
+def _process_og_task(og_idx: int, args) -> tuple[str, list]:
+    """
+    The actual computation worker.
+    'og' is passed from the main process, but it references
+    the static genomes now available in _SHARED_GENOME_DATA.
+    """
+    og = _WORKER_OGS[og_idx]
+
+    results = og.get_refined_sogs(
+        window_size=args.window, ratio_threshold=args.ratio_threshold, skip_single_ortholog=args.skip_single_orthologs
+    )
+    return og.og_id, results
+
+
+def _calculate_optimal_chunksize(iterable_size, pool_size):
+    """
+    Standard heuristic used by many libraries:
+    Divide the work into 4 chunks per worker to balance
+    overhead vs. load balancing.
+    """
+    if iterable_size == 0:
+        return 1
+
+    chunksize, extra = divmod(iterable_size, pool_size * 10)
+    if extra:
+        chunksize += 1
+    return max(1, min(chunksize, 500))
 
 
 if __name__ == "__main__":

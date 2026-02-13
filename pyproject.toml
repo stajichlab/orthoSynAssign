@@ -41,6 +41,7 @@ dev = [
 
 [project.scripts]
 orthosynassign = "orthosynassign.main:main"
+orthosynassign-vis = "orthosynassign.visualize:main"
 
 [project.urls]
 "Homepage" = "https://github.com/stajichlab/orthoSynAssign"

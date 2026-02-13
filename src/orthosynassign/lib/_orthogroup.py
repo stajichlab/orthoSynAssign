@@ -202,3 +202,55 @@ def _format_as_sog_dict(gene_list: list[Gene]) -> dict[Genome, str]:
     for g in gene_list:
         sog[g.genome].append(g)
     return dict(sog)
+
+
+def align_sog_dict(sog_dict: dict[Gene, list[Gene]]) -> dict[Gene, list[Gene]]:
+    """
+    Aligns the neighborhood lists within the dictionary so that
+    the focal gene (the key) is at the same index in every value.
+    """
+    gap_char = None
+    if not sog_dict:
+        return {}
+
+    # Calculate the 'pivot' (the max index of the key in its value list)
+    # Store the current index of each key for efficiency
+    offsets = {}
+    max_prefix_len = 0
+
+    for focal_gene, neighborhood in sog_dict.items():
+        try:
+            # Where is the focal gene in its own neighborhood?
+            idx = neighborhood.index(focal_gene)
+        except ValueError:
+            # Fallback if focal_gene isn't in the list
+            idx = 0
+
+        offsets[focal_gene] = idx
+        if idx > max_prefix_len:
+            max_prefix_len = idx
+
+    # Build the aligned dictionary
+    aligned_dict = {}
+
+    # Calculate global max length to equalize the 'tails' later
+    # First pass: calculate how long each list will be after front padding
+    temp_lengths = []
+    for focal_gene, neighborhood in sog_dict.items():
+        front_pad_size = max_prefix_len - offsets[focal_gene]
+        temp_lengths.append(front_pad_size + len(neighborhood))
+
+    max_total_len = max(temp_lengths)
+
+    # Apply padding
+    for focal_gene, neighborhood in sog_dict.items():
+        # Front padding: shifts the focal gene to the 'pivot' column
+        front_pad = [gap_char] * (max_prefix_len - offsets[focal_gene])
+
+        # Back padding: ensures all lists have the same total length
+        current_padded_list = front_pad + list(neighborhood)
+        back_pad = [gap_char] * (max_total_len - len(current_padded_list))
+
+        aligned_dict[focal_gene] = current_padded_list + back_pad
+
+    return aligned_dict

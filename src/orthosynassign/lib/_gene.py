@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from ._orthogroup import Orthogroup
@@ -111,19 +111,26 @@ class Genome:
         self._genes.append(gene_obj)
         self._gene_map[gene_obj.id] = gene_obj
 
-    def get_window(self, focal_gene: Gene, target_ogs: set, window_size: int) -> list[str]:
+    def get_window(
+        self, focal_gene: Gene, target_ogs: set, window_size: int, mode: Literal["find", "validate"] = "find"
+    ) -> list[str | Gene]:
         """
         Builds a neighborhood using ONLY OG IDs found in the target_ogs set.
+
+        In 'find' mode: returns ordered OG IDs (excluding the focal_gene).
+        In 'validate' mode: returns the full neighborhood of Gene objects (including focal_gene).
         Args:
             focal_gene: The Gene to center the window around.
             target_ogs: A set of Orthogroup IDs to include in the neighborhood.
             window_size: The size of the window to build around the focal gene.
+            mode: The mode to use when building the neighborhood.
 
         Returns:
             A list of Orthogroup IDs found in the target_ogs set within the window.
         """
         half_win = window_size // 2
-        neighborhood = []
+        upstream = []
+        downstream = []
         total_genes = len(self)
 
         for direction in [-1, 1]:
@@ -131,20 +138,36 @@ class Genome:
             while found_count < half_win:
                 curr_idx = focal_gene.chain_index + (offset * direction)
 
-                # Boundary checks
+                # Boundary checks for linear chromosomes
                 if self.chromosome_type == "l" and (curr_idx < 0 or curr_idx >= total_genes):
                     break
 
+                # Handle circularity with modulo
                 neighbor_gene = self[curr_idx % total_genes]
+
+                # Stop if we hit a different scaffold/chromosome
                 if neighbor_gene.seqid != focal_gene.seqid:
                     break
 
-                # Logic is now: Is this gene a shared anchor?
+                # Collect the gene
+                if direction == -1:
+                    upstream.append(neighbor_gene)
+                else:
+                    downstream.append(neighbor_gene)
+
+                # Check if this gene is an "anchor" (exists in target_ogs)
                 if neighbor_gene.orthogroup and neighbor_gene.orthogroup.og_id in target_ogs:
-                    neighborhood.append(neighbor_gene.orthogroup.og_id)
                     found_count += 1
 
                 offset += 1
                 if offset >= total_genes:
                     break
-        return neighborhood
+
+        if mode == "validate":
+            # Full genomic context: [Upstream...Focal...Downstream]
+            return upstream[::-1] + [focal_gene] + downstream
+        else:
+            # 'find' mode: Only the flanking shared anchors
+            # We combine upstream (reversed) and downstream, excluding the focal gene
+            flanks: list[Gene] = upstream[::-1] + downstream
+            return [g.orthogroup.og_id for g in flanks if g.orthogroup and g.orthogroup.og_id in target_ogs]

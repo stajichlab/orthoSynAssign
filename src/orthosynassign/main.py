@@ -9,7 +9,6 @@ import argparse
 import logging
 import multiprocessing
 import os
-import re
 import sys
 import textwrap
 import time
@@ -22,12 +21,12 @@ from tqdm import tqdm
 
 from . import AUTHOR, VERSION
 from . import __doc__ as _module_doc
-from .lib.parsers import BedParser, read_orthofinder_table, save_results_tsv
+from ._utils import CustomHelpFormatter, setup_logging, validate_annotations, validate_orthogroup
+from .lib.parsers import read_orthofinder_table, save_results_tsv
 
 if TYPE_CHECKING:
     from .lib._gene import Gene, Genome
     from .lib._orthogroup import Orthogroup
-    from .lib.parsers import AnnotationParser
 
 _EPILOG = textwrap.dedent(f"""\
 Examples:
@@ -61,7 +60,7 @@ def main(args: list[str] | None = None) -> int:
     args = _parse_arguments() or sys.argv[1:]
 
     # Setup logging
-    _setup_logging(args.verbose)
+    setup_logging(args.verbose)
     logger = logging.getLogger(__name__)
 
     logger.info("Starting orthoSynAssign")
@@ -69,8 +68,8 @@ def main(args: list[str] | None = None) -> int:
 
     try:
         # Validate inputs
-        annotations = _validate_annotations(args, logger)
-        og_file = _validate_orthogroup(args)
+        annotations = validate_annotations(args, logger)
+        og_file = validate_orthogroup(args)
 
         # Read gff
         genomes = {}
@@ -78,8 +77,8 @@ def main(args: list[str] | None = None) -> int:
             genome = annotation.parse()
             genomes[genome.sample_name] = genome
 
-        # Read OrthoFinder orthogroups
-        logger.info(f"Reading OrthoFinder data from: {og_file}")
+        # Read orthogroup
+        logger.info(f"Reading orthogroup data from: {og_file}")
         orthogroups = read_orthofinder_table(og_file, genomes)
         logger.debug(f"Loaded {len(orthogroups)} orthogroups")
 
@@ -109,31 +108,11 @@ def main(args: list[str] | None = None) -> int:
     return 0
 
 
-class _CustomHelpFormatter(argparse.RawDescriptionHelpFormatter):
-    """
-    Custom help formatter for argparse to enhance text wrapping and default value display.
-
-    This formatter adjusts the text wrapping for better readability and ensures that the default value of an argument is displayed
-    in the help message if not already present.
-    """
-
-    def _get_help_string(self, action):
-        """Allow additional message after default parameter displayed."""
-        help = action.help
-        pattern = r"\(default: .+\)"
-        if re.search(pattern, action.help) is None:
-            if action.default not in [argparse.SUPPRESS, None, False]:
-                defaulting_nargs = [argparse.OPTIONAL, argparse.ZERO_OR_MORE]
-                if action.option_strings or action.nargs in defaulting_nargs:
-                    help += " (default: %(default)s)"
-        return help
-
-
 def _parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         description=_module_doc,
-        formatter_class=_CustomHelpFormatter,
+        formatter_class=CustomHelpFormatter,
         epilog=_EPILOG,
         add_help=False,
     )
@@ -160,6 +139,15 @@ def _parse_arguments():
 
     opt_args = parser.add_argument_group("Options")
     opt_args.add_argument(
+        "-o",
+        "--output",
+        dest="output",
+        type=Path,
+        default="Refined_SOGs-%s.tsv" % time.strftime("%Y%m%d-%H%M%S", time.gmtime()),
+        help="Output of results (default: Refined_SOGs-[YYYYMMDD-HHMMSS].tsv (UTC timestamp))",
+    )
+
+    opt_args.add_argument(
         "-w",
         "--window",
         dest="window",
@@ -181,15 +169,6 @@ def _parse_arguments():
     )
 
     opt_args.add_argument(
-        "-o",
-        "--output",
-        dest="output",
-        type=Path,
-        default="Refined_SOGs-%s.tsv" % time.strftime("%Y%m%d-%H%M%S", time.gmtime()),
-        help="Output of results (default: Refined_SOGs-[YYYYMMDD-HHMMSS].tsv (UTC timestamp))",
-    )
-
-    opt_args.add_argument(
         "--skip_single_orthologs",
         dest="skip_single_orthologs",
         action="store_true",
@@ -201,46 +180,6 @@ def _parse_arguments():
     opt_args.add_argument("-h", "--help", action="help", help="show this help message and exit")
 
     return parser.parse_args()
-
-
-def _setup_logging(verbose: bool = False):
-    """Configure logging for the application."""
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
-
-def _validate_annotations(args, logger) -> list[AnnotationParser]:
-    """
-    Validate input files and directories.
-
-    Args:
-        args: Parsed command line arguments
-    """
-    # Check annotation files
-    if args.bed:
-        files = args.bed
-        parser = BedParser
-
-    annotations = []
-    for file in files:
-        logger.debug(f"Reading annotation from: {file}")
-        annotations.append(parser(file))
-
-    return annotations
-
-
-def _validate_orthogroup(args) -> Path:
-    # Check OrthoFinder file
-    file = Path(args.og_input)
-    if not file.exists():
-        raise FileNotFoundError(f"Orthogroup file not found: {file}")
-    if not file.is_file():
-        raise ValueError(f"Orthogroup file must be a regular file: {file}")
-    return file
 
 
 def _generate_sog_results(

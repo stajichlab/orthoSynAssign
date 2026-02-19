@@ -1,159 +1,133 @@
 # orthoSynAssign
 
-Ortholog Synteny Assignment Tool - A Python tool for analyzing orthologous groups and synteny using OrthoFinder results and genome annotation files (GFF3/GTF).
-
-## Features
-
-- Parse GFF3 and GTF formatted genome annotation files
-- Read OrthoFinder Orthogroups.tsv files
-- Process multiple genome annotations from a directory
-- Command-line interface for easy integration into pipelines
-- Extensible library for custom analyses
-
-## Installation
-
-### From source
-
-```bash
-# Clone or navigate to the project directory
-cd orthoSynAssign
-
-# Install in development mode
-pip install -e .
-
-# Or install normally
-pip install .
-```
+Ortholog Synteny Assignment Tool - A Python tool for analyzing orthologous groups and synteny using OrthoFinder results and genome
+annotation files (BED converted from GFF3/GTF). This is a Python re-implementation of the [OrthoRefine], which is written in C++
+but having some issues with sample matching and memory usage. This tool is designed to be more efficient, easier to use, and more
+flexible for custom analyses. We also provide a companion visualization tool, `orthosynassign-vis`, for users to verify the
+results. This refined version includes improved memory management and a streamlined workflow for assigning syntenic regions,
+addressing limitations identified in the original OrthoRefine implementation. Specifically, it incorporates optimized data
+structures for handling genomic ranges and utilizes more efficient algorithms for finding overlaps between ortholog groups and
+genomic segments. The core logic has been carefully reviewed and tested to ensure accuracy and performance, focusing on robustness
+in handling large datasets.
 
 ## Usage
 
-### Command Line Interface
+First, install the package following the [instruction](#install) below.
 
-The main program `orthoSynAssign.py` provides a command-line interface:
+`orthosynassign` is the main program for running the analysis. It takes the OrthoFinder-style `orthogroup.tsv` or the `N0.tsv`
+under phylogenetic hierarchical orthogroups directory and output the refined orthogroups with synteny information determined using
+the genome annotation files.
 
-```bash
-# Using GFF3 files
-python orthoSynAssign.py --gff_folder /path/to/gff_files --orthofinder Orthogroups.tsv
+Most genome annotation files are made in GFF3/GTF format. However, the flexibility on the 9th attribute column makes it
+challenging to correctly parse the required information and match it to entries in the orthogroup file (which usually contains
+protein IDs). To make this easier, we provide a script `misc/convert_bed.sh` that converts GFF3/GTF files into BED format and uses
+gene IDs as names to link with genes in the orthogroup file.
 
-# Using GTF files
-python orthoSynAssign.py --gtf_folder /path/to/gtf_files --orthofinder Orthogroups.tsv
+The `orthogroup.tsv` or `N0.tsv` file from OrthoFinder should be tab-separated with:
 
-# Specify output directory
-python orthoSynAssign.py --gff_folder annotations/ --orthofinder Orthogroups.tsv -o results/
-
-# Enable verbose logging
-python orthoSynAssign.py --gff_folder annotations/ --orthofinder Orthogroups.tsv -v
-```
-
-### Command Line Options
-
-- `--gff_folder PATH` - Path to folder containing GFF3 formatted genome annotation files
-- `--gtf_folder PATH` - Path to folder containing GTF formatted genome annotation files
-  (Note: `--gff_folder` and `--gtf_folder` are mutually exclusive)
-- `--orthofinder PATH` - Path to OrthoFinder Orthogroups.tsv file (required)
-- `-o, --output PATH` - Output directory for results (default: output)
-- `-v, --verbose` - Enable verbose logging
-
-### Using as a Library
-
-You can also use orthoSynAssign as a library in your own Python scripts:
-
-```python
-from orthoSynAssign.lib import read_gtf, read_gff3, read_orthofinder_table
-from orthoSynAssign.lib.parsers import read_gff_folder, read_gtf_folder
-
-# Read a single GFF3 file
-features = read_gff3('genome.gff3')
-
-# Read a single GTF file
-features = read_gtf('genome.gtf')
-
-# Read all GFF3 files from a folder
-annotations = read_gff_folder('annotations/')
-
-# Read OrthoFinder orthogroups
-orthogroups = read_orthofinder_table('Orthogroups.tsv')
-
-# Access the data
-for species, feature_list in annotations.items():
-    print(f"{species}: {len(feature_list)} features")
-
-for og_id, species_genes in orthogroups.items():
-    print(f"{og_id}: {len(species_genes)} species")
-```
-
-## File Formats
-
-### GFF3/GTF Files
-
-The tool expects standard GFF3 or GTF formatted genome annotation files with 9 tab-separated columns:
-1. seqid - Chromosome/scaffold name
-2. source - Source of the annotation
-3. type - Feature type (gene, mRNA, CDS, etc.)
-4. start - Start position (1-based)
-5. end - End position (1-based, inclusive)
-6. score - Score (or '.')
-7. strand - Strand (+, -, or .)
-8. phase - Phase (0, 1, 2, or .)
-9. attributes - Semicolon-separated attributes
-
-### OrthoFinder Orthogroups.tsv
-
-The Orthogroups.tsv file from OrthoFinder should be tab-separated with:
 - First column: Orthogroup ID (e.g., OG0000001)
-- Subsequent columns: Gene IDs for each species (column headers are species names)
+- Subsequent columns: Protein IDs for each species (column headers are species names)
 
-## Project Structure
+In order to make it work, users need to convert the protein IDs to gene IDs before the analysis. This is typically done by
+removing the transcript suffix (e.g., -T1, -T2).
+
+Please use `orthosynassign --help` to see all available options and arguments:
 
 ```
-orthoSynAssign/
-├── orthoSynAssign/          # Main package
-│   ├── __init__.py          # Package initialization
-│   └── lib/                 # Library modules
-│       ├── __init__.py      # Library initialization
-│       └── parsers.py       # File parsing functions
-├── orthoSynAssign.py        # Main command-line program
-├── setup.py                 # Installation script
-├── requirements.txt         # Python dependencies
-├── .gitignore              # Git ignore file
-└── README.md               # This file
+Required arguments:
+  --og_file OG_FILE     Path to OrthoFinder Orthogroups.tsv file
+  --bed file [files ...]
+                        Path of BED formatted genome annotation files
+
+Options:
+  -w, --window WINDOW   Controls how many total genes are considered when determining synteny for a single gene (default: 8)
+  -r, --ratio_threshold THRESHOLD
+                        Controls how many genes within a window must provide synteny support to classify the genes being compared as syntenous (default: 0.5)
+  -o, --output OUTPUT   Output of results (default: Refined_SOGs-[YYYYMMDD-HHMMSS].tsv (UTC timestamp))
+  -t, --threads THREADS
+                        Number of cpus to use (default: 4)
+  -v, --verbose         Enable verbose logging
+  -V, --version         show program's version number and exit
+  -h, --help            show this help message and exit
 ```
 
-## Development
+`orthosynassign-vis` is a companion visualization script to verify the refined results of `orthosynassign`. It utilizes the
+[pyGenomeViz] to plot the orthogroups and their synteny relationships. It takes the original, unrefined `orthogroup.tsv` file along
+with the refined orthogroup file to plot a certain set of refined orthogroups using their previous orthogroup IDs as the labels
+for each gene in the plot. Please use `orthosynassign-vis --help` to see all available options and arguments:
 
-### Adding New Features
-
-The library is designed to be extensible. You can add new parsing functions or analysis methods to the `orthoSynAssign/lib/` directory.
-
-### Testing
-
-```bash
-# Install development dependencies
-pip install -e ".[dev]"
-
-# Run tests (when implemented)
-pytest tests/
 ```
+Required arguments:
+  --og_file OG_FILE     Path to the original orthogroups.tsv file
+  --sog_file SOG_FILE   Path to the refined orthogroups.tsv file
+  --bed file [files ...]
+                        Path of BED formatted genome annotation files
+  --sog SOG [SOG ...]   Plot the SOG of the previous orthosynassign analysis
+
+Options:
+  -w, --window WINDOW   The window size applied to the previous orthosynassign analysis (default: 8)
+  -o, --output OUTPUT   Output directory (default: visualize_[sog_file])
+  -f, --fmt {png,jpg,svg,pdf}
+                        Output image format. (default: png)
+  -k, --keep_all_genes  Keep genes that are not assigned to any orthogroup
+  -v, --verbose         Enable verbose logging
+  -V, --version         show program's version number and exit
+  -h, --help            show this help message and exit
+```
+
+Here is an example of a refined orthogroup. The genes of the observed refined orthogroup are labelled in yellow; genes assigned to
+the same orthogroup within this given window are labelled in other chromatic colors; genes with orthologs in other genomes located
+outside the given window are labelled in gray.
+
+<img src= "misc/SOG000032.OG0000040.svg" alt="A refined orthogroup SOG000032" width="800">
 
 ## Requirements
 
-- Python >= 3.8
-- No external dependencies required for basic functionality
+- Python >= 3.9, < 3.14
+- [pyGenomeViz] >= 1.6.0
 
-## License
+## Install
 
-[Add your license here]
+### From source
+
+Clone through ssh
+
+```bash
+git clone git@github.com:stajichlab/orthoSynAssign.git
+```
+
+or https
+
+```bash
+git clone https://github.com/stajichlab/orthoSynAssign.git
+```
+
+Navigate to the project directory and install the package.
+
+```bash
+cd orthoSynAssign
+pip install .
+```
+
+### For developing
+
+Developers should clone the project directly and install the package with dev flag. Please also set up the pre-commit first before
+making commit.
+
+```bash
+pip install -e ".[dev]"
+pre-commit install
+```
 
 ## Citation
 
 If you use orthoSynAssign in your research, please cite:
 
-[Add citation information]
-
-## Contact
-
-[Add contact information]
+[Ludwig, J., Mrázek, J. OrthoRefine: automated enhancement of prior ortholog identification via synteny. BMC Bioinformatics 25, 163 (2024)](https://doi.org/10.1186/s12859-024-05786-7)
 
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+[OrthoRefine]: https://github.com/jl02142/OrthoRefine
+[pyGenomeViz]: https://github.com/moshi4/pyGenomeViz

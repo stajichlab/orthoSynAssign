@@ -1,57 +1,108 @@
 from __future__ import annotations
 
-from collections import defaultdict, deque
+from collections import Counter, defaultdict, deque
 from itertools import combinations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Iterator
 
 if TYPE_CHECKING:
-    from ._gene import Gene, Genome, Protein
+    from ._gene import Gene, Genome
 
 
 class Orthogroup:
-    """Represents a group of orthologous genes."""
+    """Represents a group of orthologous genes.
 
-    __slots__ = ("og_id", "_genes")
+    Attributes:
+        id: The unique identifier for the orthogroup.
+        _genes: A private attribute to store the genes in the orthogroup.
+    """
 
-    def __init__(self, og_id: str):
-        self.og_id = og_id
+    __slots__ = ("id", "_genes")
+
+    def __init__(self, og_id: str) -> None:
+        """Initialize an Orthogroup with a given ID.
+
+        Args:
+            og_id (str): The unique identifier for the orthogroup.
+        """
+        self.id = og_id
         self._genes: list[Gene] = []
 
+    def __repr__(self) -> str:
+        """Return a string representation of the Orthogroup.
+
+        Returns:
+            str: A string in the format "[{id} | with {len(self._genes)} genes]".
+        """
+        return f"[{self.id} | with {len(self._genes)} genes]"
+
     def __len__(self) -> int:
+        """Return the number of genes in the Orthogroup.
+
+        Returns:
+            int: The number of genes.
+        """
         return len(self._genes)
 
     def __getitem__(self, index: int) -> Gene:
+        """Retrieve a gene by its index in the Orthogroup.
+
+        Args:
+            index (int): The index of the gene to retrieve.
+
+        Returns:
+            Gene: The gene at the specified index.
+        """
         return self._genes[index]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Gene]:
+        """Return an iterator over the genes in the Orthogroup.
+
+        Returns:
+            Iterator[Gene]: An iterator over the genes.
+        """
         return iter(self._genes)
 
-    def add_gene(self, gene_obj: Gene):
+    def __getstate__(self) -> dict[str, Any]:
+        """Get the state of the object for pickling.
+
+        Returns:
+            dict[str, Any]: The state of the object.
+        """
+        return {slot: getattr(self, slot) for slot in self.__slots__ if hasattr(self, slot)}
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        """Restore the state of the object from pickling.
+
+        Args:
+            state (dict[str, Any]): The state to restore.
+        """
+        for slot, value in state.items():
+            setattr(self, slot, value)
+
+    def add_gene(self, gene_obj: Gene) -> None:
+        """Add a gene to the Orthogroup.
+
+        If the gene is not already present in the Orthogroup, it will be added and its orthogroup attribute set to this
+        Orthogroup.
+
+        Args:
+            gene_obj (Gene): The gene to add.
+        """
         if gene_obj not in self._genes:
             gene_obj.orthogroup = self
             self._genes.append(gene_obj)
 
-    def add_protein(self, protein_obj: Protein):
-        self.add_gene(protein_obj.gene)
+    def get_refined_sogs(self, window_size: int, ratio_threshold: float) -> list[dict[Genome, list[Gene]]]:
+        """Refine the orthologous gene groups (SOGs) within the orthogroup by finding syntenic 'edges' using pairwise comparisons.
 
-    def get_samples(self):
-        return {gene.genome for gene in self}
+        Args:
+            window_size (int): The size of the window used for comparison.
+            ratio_threshold (float): The threshold ratio used to determine if a pair of genes is considered syntenic.
 
-    def has_paralogs(self):
-        """Checks if any genome is represented more than once."""
-        from collections import Counter
-
-        counts = Counter(gene.genome for gene in self)
-        return any(count > 1 for count in counts.values())
-
-    def get_refined_sogs(self, window_size, ratio_threshold, skip_single_ortholog=True):
+        Returns:
+            list[dict[Genome, list[Gene]]]: A list of dictionaries, each representing a refined SOG with genome keys and gene
+            lists as values.
         """
-        Refines the Orthogroup into SOGs based on synteny.
-        """
-        # Quick exit for non-paralogous groups
-        if skip_single_ortholog and not self.has_paralogs():
-            return [self._as_sog_dict(self._genes)]
-
         # Find the syntenic 'edges' using pairwise comparisons
         refined_pairs = self._perform_pairwise_comparisons(window_size, ratio_threshold)
 
@@ -62,8 +113,16 @@ class Orthogroup:
         # Cluster the pairs into SOGs (via BFS/Connected Components)
         return _consolidate_into_sogs(refined_pairs)
 
-    def _perform_pairwise_comparisons(self, window_size, ratio_threshold):
-        """Internal helper to organize genes by genome and run comparisons."""
+    def _perform_pairwise_comparisons(self, window_size: int, ratio_threshold: float) -> list[tuple[Gene, Gene]]:
+        """Internal helper to organize genes by genome and run comparisons.
+
+        Args:
+            window_size (int): The size of the window used for synteny comparison.
+            ratio_threshold (float): The threshold for the ratio of overlapping genes to consider two genes as syntenic.
+
+        Returns:
+            list[tuple[Gene, Gene]]: A list of refined pairs of genes that are considered syntenic based on the given criteria.
+        """
         genes_by_genome = defaultdict(list)
         for gene in self:
             genes_by_genome[gene.genome].append(gene)
@@ -75,37 +134,47 @@ class Orthogroup:
             all_refined_pairs.extend(pairs)
         return all_refined_pairs
 
-    def _as_sog_dict(self, gene_list: list[Gene]) -> dict[str, list]:
-        """Helper to format a list of genes into the final SOG output structure."""
-        sog = defaultdict(list)
-        for g in gene_list:
-            sog[g.genome].append(g)
-        return dict(sog)
-
 
 def compare_gene_sets(
     genes_a: list[Gene], genes_b: list[Gene], window_size: int, ratio_threshold: float
 ) -> list[tuple[Gene, Gene]]:
-    """
-    Compare two sets of genes from different genomes within the same Orthogroup
-    and return a list of syntenically supported orthologous pairs.
+    """Compare two sets of genes from different genomes within the same Orthogroup and return a list of syntenically supported
+    orthologous pairs.
+
+    The comparison is based on the given window size and ratio threshold. Genes are considered syntenic if they share enough
+    overlapping orthogroups within the specified window, as determined by the ratio threshold.
+
+    Args:
+        genes_a (list[Gene]): A list of genes from the first genome in the Orthogroup.
+        genes_b (list[Gene]): A list of genes from the second genome in the Orthogroup.
+        window_size (int): The size of the window used for synteny comparison. This determines how many genes around a focal gene
+            are considered when comparing synteny.
+        ratio_threshold (float): The threshold for the ratio of overlapping genes to consider two genes as syntenic. If the ratio
+            of overlapping orthogroups between two genes is greater than or equal to this threshold, they are considered syntenic.
+
+    Returns:
+        list[tuple[Gene, Gene]]: A list of tuples where each tuple contains a pair of syntenically supported orthologous genes
+        from the two input gene sets.
     """
     # Get the shared orthogroups once for this pair
-    genome_a = genes_a[0].genome
-    genome_b = genes_b[0].genome
+    genome_a: Genome = genes_a[0].genome
+    genome_b: Genome = genes_b[0].genome
     shared_ogs = get_shared_ogs(genome_a, genome_b)
 
     # Determine the primary and secondary genomes
     primary, secondary = (genes_a, genes_b) if len(genes_a) <= len(genes_b) else (genes_b, genes_a)
 
     # Pre-calculate all windows for the secondary set
-    secondary_windows = {gene: gene.genome.get_window(gene, shared_ogs, window_size) for gene in secondary}
+    secondary_windows = {
+        gene: [g.orthogroup.id for g in genome_b.get_window(gene, shared_ogs, window_size) if g.orthogroup] for gene in secondary
+    }
 
     refined_pairs = []
 
     # Compare windows
     for focal_gene in primary:
-        win_p = focal_gene.genome.get_window(focal_gene, shared_ogs, window_size)
+        genes = focal_gene.genome.get_window(focal_gene, shared_ogs, window_size)
+        win_p = [g.orthogroup.id for g in genes if g.orthogroup]
 
         # Find the best match
         best_candidate = None
@@ -125,89 +194,36 @@ def compare_gene_sets(
 
 
 def get_shared_ogs(genome_a: Genome, genome_b: Genome) -> set[str]:
+    """Retrieve the set of Orthogroup IDs that are present in both provided genomes.
+
+    This function is used to identify the common orthogroups shared between two genomes, which serves as a basis for comparing
+    their synteny and identifying syntenic orthologous pairs.
+
+    Args:
+        genome_a (Genome): The first genome.
+        genome_b (Genome): The second genome.
+
+    Returns:
+        set[str]: A set of Orthogroup IDs that are common to both genomes.
     """
-    Returns a set of OG IDs that are present in both genomes.
-    This acts as the 'common language' for the comparison.
-    """
-    ogs_a = {g.orthogroup.og_id for g in genome_a if g.orthogroup}
-    ogs_b = {g.orthogroup.og_id for g in genome_b if g.orthogroup}
+    ogs_a = {g.orthogroup.id for g in genome_a if g.orthogroup}
+    ogs_b = {g.orthogroup.id for g in genome_b if g.orthogroup}
 
     return ogs_a.intersection(ogs_b)
 
 
-def _calculate_synteny_ratio(win_a: list[str], win_b: list[str]) -> float:
-    """
-    Calculates the 1-to-1 synteny match ratio between two dynamic windows.
-    """
-    if not win_a or not win_b:
-        return 0.0
+def align_sog_dict(sog_dict: dict[Gene, list[Gene]]) -> dict[Gene, list[Gene | None]]:
+    """Aligns the neighborhood lists within the dictionary so that the focal gene (the key) is at the same index in every value.
 
-    # Count 1-to-1 matches
-    matches = 0
-    remaining_b = list(win_b)
+    The function pads the neighborhoods with 'None' values to ensure that the focal gene is always at the same index across all
+    neighborhoods. This alignment is necessary for further analysis, such as synteny comparison.
 
-    for og_id in win_a:
-        if og_id in remaining_b:
-            matches += 1
-            remaining_b.remove(og_id)
+    Args:
+        sog_dict (dict[Gene, list[Gene]]): A dictionary where keys are genes and values are lists of neighboring genes.
 
-    # Calculate the ratio of matches to total genes
-    denominator = max(len(win_a), len(win_b))
-
-    return matches / denominator
-
-
-def _consolidate_into_sogs(pairs: list[tuple[Gene, Gene]]):
-    """
-    Standard Connected Components algorithm to cluster genes.
-    Expects a list of gene pairs: [(gene1, gene2), (gene3, gene4), ...]
-    """
-    # Build an adjacency list (the graph)
-    adj = defaultdict(list)
-    nodes = set()
-    for u, v in pairs:
-        adj[u].append(v)
-        adj[v].append(u)
-        nodes.update([u, v])
-
-    visited = set()
-    sog_clusters = []
-
-    # Traverse the graph to find connected components
-    for node in nodes:
-        if node not in visited:
-            # Start a new SOG
-            component = []
-            queue = deque([node])
-            visited.add(node)
-
-            while queue:
-                curr = queue.popleft()
-                component.append(curr)
-
-                for neighbor in adj[curr]:
-                    if neighbor not in visited:
-                        visited.add(neighbor)
-                        queue.append(neighbor)
-
-            # Format the cluster
-            sog_clusters.append(_format_as_sog_dict(component))
-
-    return sog_clusters
-
-
-def _format_as_sog_dict(gene_list: list[Gene]) -> dict[Genome, str]:
-    """Formats a list of genes into {Genome: [Genes]}."""
-    sog = defaultdict(list)
-    for g in gene_list:
-        sog[g.genome].append(g)
-    return dict(sog)
-
-
-def align_sog_dict(sog_dict: dict[Gene, list[Gene]]) -> dict[Gene, list[Gene]]:
-    """
-    Aligns the neighborhood lists within the dictionary so that
-    the focal gene (the key) is at the same index in every value.
+    Returns:
+        dict[Gene, list[Gene | None]]: A dictionary with the same structure as `sog_dict`, but with padded neighborhoods to align
+        the focal gene at the same index.
     """
     gap_char = None
     if not sog_dict:
@@ -254,3 +270,96 @@ def align_sog_dict(sog_dict: dict[Gene, list[Gene]]) -> dict[Gene, list[Gene]]:
         aligned_dict[focal_gene] = current_padded_list + back_pad
 
     return aligned_dict
+
+
+def _calculate_synteny_ratio(win_a: list[str], win_b: list[str]) -> float:
+    """Calculates the 1-to-1 synteny match ratio between two dynamic windows.
+
+    Specifically, this function computes the ratio of overlapping orthogroups present in both window sets. The overlap is
+    determined by finding the minimum count for each shared Orthogroup ID across the two windows.
+
+    Args:
+        win_a (list[str]): A list of Orthogroup IDs representing the first dynamic window.
+        win_b (list[str]): A list of Orthogroup IDs representing the second dynamic window.
+
+    Returns:
+        float: The synteny ratio, calculated as the number of overlapping orthogroups divided by the length of the longer window.
+        If either window is empty, the function returns 0.0.
+    """
+    if not win_a or not win_b:
+        return 0.0
+
+    # Counter handles the 1-to-1 matching via the & (intersection) operator
+    counts_a = Counter(win_a)
+    counts_b = Counter(win_b)
+
+    # This automatically takes the minimum count for each shared ID
+    matches = sum((counts_a & counts_b).values())
+
+    return matches / max(len(win_a), len(win_b))
+
+
+def _consolidate_into_sogs(pairs: list[tuple[Gene, Gene]]) -> list[dict[Genome, list[Gene]]]:
+    """Consolidates a list of gene pairs into Syntenic Orthologous Groups (SOGs).
+
+    This function uses the provided list of syntenically supported orthologous pairs to construct connected components within a
+    graph representation. Each connected component represents a SOG, where all genes in the component are syntenically linked.
+
+    Args:
+        pairs (list[tuple[Gene, Gene]]): A list of tuples, each containing two syntenically supported orthologous genes from
+        different genomes.
+
+    Returns:
+        list[dict[Genome, list[Gene]]]: A list of SOGs. Each SOG is represented as a dictionary where keys are genomes and values
+        are lists of genes from that genome belonging to the SOG.
+    """
+    # Build an adjacency list (the graph)
+    adj = defaultdict(list)
+    nodes = set()
+    for u, v in pairs:
+        adj[u].append(v)
+        adj[v].append(u)
+        nodes.update([u, v])
+
+    visited = set()
+    sog_clusters = []
+
+    # Traverse the graph to find connected components
+    for node in nodes:
+        if node not in visited:
+            # Start a new SOG
+            component = []
+            queue = deque([node])
+            visited.add(node)
+
+            while queue:
+                curr = queue.popleft()
+                component.append(curr)
+
+                for neighbor in adj[curr]:
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        queue.append(neighbor)
+
+            # Format the cluster
+            sog_clusters.append(_format_as_sog_dict(component))
+
+    return sog_clusters
+
+
+def _format_as_sog_dict(gene_list: list[Gene]) -> dict[Genome, list[Gene]]:
+    """Formats a list of genes into a dictionary that maps each genome to its corresponding genes in the list.
+
+    This function is used to convert a list of genes into a SOG dictionary format, where the keys are genomes and the values are
+    lists of genes from that genome present in the input list.
+
+    Args:
+        gene_list (list[Gene]): A list of Gene objects.
+
+    Returns:
+        dict[Genome, list[Gene]]: A dictionary mapping each genome to a list of genes from that genome.
+    """
+    sog = defaultdict(list)
+    for g in gene_list:
+        sog[g.genome].append(g)
+    return dict(sog)

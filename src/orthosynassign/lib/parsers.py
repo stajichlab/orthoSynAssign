@@ -11,34 +11,70 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Iterator
 
-from ._gene import Gene, Genome, Protein, Proteome
+from ._gene import Gene, Genome
 from ._orthogroup import Orthogroup
 
 logger = logging.getLogger(__name__)
 
 
 class AnnotationParser(ABC):
-    """Abstract base class for genomic annotation parsers."""
+    """Abstract base class for genomic annotation parsers.
 
-    def __init__(self, file: str | Path):
+    This class provides a framework for parsing various types of genomic annotation files such as GTF,
+    GFF3, and others. It supports reading compressed files in gzip format.
+
+    Attributes:
+        file (Path): The path to the annotation file.
+        _genome (Genome | None): A `Genome` object representing the parsed data from the file.
+            This attribute is initialized to `None` and populated during the parsing process.
+    """
+
+    __slots__ = ("file", "_genome")
+
+    def __init__(self, file: str | Path) -> None:
+        """Initialize an AnnotationParser instance.
+
+        Args:
+            file (str | Path): The path to the annotation file.
+
+        Raises:
+            FileNotFoundError: If the specified annotation file does not exist.
+            ValueError: If the specified annotation file is not a regular file.
+        """
         self.file = Path(file)
         if not self.file.exists():
             raise FileNotFoundError(f"Annotation file not found: {self.file}")
         if not self.file.is_file():
             raise ValueError(f"Annotation file must be a regular file: {self.file}")
-        self._genome = None
-        self._proteome = None
+        self._genome: Genome | None = None
 
-    def parse(self, *args: Any, **kwargs: Any):
-        """Parse annotation file."""
+    def parse(self, *args: Any, **kwargs: Any) -> Genome:
+        """Parse annotation file.
+
+        This method reads the annotation file line by line, skipping empty lines and comments. It delegates the actual parsing of
+        each line to the `_parser` method, which must be implemented by subclasses. After processing all lines, it logs the number
+        of features loaded into the `Genome` object.
+
+        Args:
+            *args (Any): Additional positional arguments to pass to the `_parser` method.
+            **kwargs (Any): Additional keyword arguments to pass to the `_parser` method.
+
+        Returns:
+            Genome: The `Genome` object containing the parsed data from the file.
+
+        Raises:
+            FileNotFoundError: If the specified annotation file does not exist.
+            ValueError: If the specified annotation file is not a regular file.
+            Exception: Any exception raised during the parsing process, which will result in resetting the `_genome` attribute to
+                `None`.
+        """
         try:
             opener = gzip.open if self._is_gzip_file() else open
 
             with opener(self.file, "rt", encoding="utf-8") as f:
                 logger.info(f"Reading annotation file: {self.file}")
                 sample = re.sub(r"\.(bed|gff3?|gtf)(\.gz)?$", "", self.file.name)
-                self._genome = Genome(sample_name=sample)
-                self._proteome = Proteome(sample_name=sample)
+                self._genome = Genome(sample)
 
                 for line_num, line in enumerate(f, 1):
                     line = line.strip()
@@ -52,13 +88,26 @@ class AnnotationParser(ABC):
             logger.info(f"Loaded {len(self._genome)} features from {self.file}")
         except Exception:
             self._genome = None
-            self._proteome = None
             raise
 
         return self._genome
 
     @abstractmethod
-    def _parser(self, line_num: int, line: str, *args: Any, **kwargs: Any):
+    def _parser(self, line_num: int, line: str, *args: Any, **kwargs: Any) -> None:
+        """Abstract method for parsing a single line of an annotation file.
+
+        This method must be implemented by subclasses to parse the specific format of the annotation
+        file being processed.
+
+        Args:
+            line_num (int): The current line number in the annotation file.
+            line (str): The content of the current line, stripped of leading and trailing whitespace.
+            *args (Any): Additional positional arguments for custom parsing logic.
+            **kwargs (Any): Additional keyword arguments for custom parsing logic.
+
+        Raises:
+            Exception: Any exception raised during the parsing process will be propagated up to the `parse` method.
+        """
         pass
 
     def _is_gzip_file(self) -> bool:
@@ -78,158 +127,51 @@ class AnnotationParser(ABC):
 
 
 class BedParser(AnnotationParser):
-    def _parser(self, line_num: int, line: str):
+    """BED parser class for genomic annotation files.
+
+    This class implements the `_parser` method to parse BED format annotation files. Each line in a BED file contains information
+    about a genomic feature, such as its chromosomal location and name.
+    """
+
+    def _parser(self, line_num: int, line: str) -> None:
+        """Parse a single line of a BED format annotation file.
+
+        This method splits the line into fields and extracts the necessary information about the genomic feature,
+        such as its chromosomal location and name. It then adds a `Gene` object representing this feature to
+        the `Genome` object being built.
+
+        Args:
+            line_num (int): The current line number in the annotation file.
+            line (str): The content of the current line, stripped of leading and trailing whitespace.
+
+        Raises:
+            ValueError: If the line does not contain exactly 4 fields, indicating an invalid format for a BED
+                file.
+        """
+        self._genome: Genome
         fields = line.split("\t")
         if len(fields) != 4:
             raise ValueError(f"Line {line_num}: Expected 4 fields, got {len(fields)}")
         (seqid, start, end, name) = fields
-        self._genome.add_gene(Gene(seqid=seqid, start=int(start), end=int(end), id=name))
+        self._genome.add_gene(Gene(seqid=seqid, start=int(start), end=int(end), gene_id=name))
 
 
-class _GFFGTFParser(AnnotationParser):
-    """
-    Abstract base class for GFF and GTF parsers.
-    """
-
-    def parse(
-        self,
-        gene_parser: dict[str, str] = {"feature_type": ["gene"], "ID": "locus_tag"},
-        protein_parser: dict[str, str] = {"feature_type": ["CDS"], "ID": "protein_id"},
-        *args,
-        **kwargs,
-    ):
-        self._g_par = gene_parser
-        self._p_par = protein_parser
-        self._last_gene = None
-        return super().parse(*args, **kwargs)
-
-    def _parser(
-        self,
-        line_num: int,
-        line: str,
-        *args,
-        **kwargs,
-    ):
-        fields = line.split("\t")
-        if len(fields) != 9:
-            raise ValueError(f"Line {line_num}: Expected 9 fields, got {len(fields)}")
-        (
-            seqid,
-            _,
-            feature_type,
-            start,
-            end,
-            _,
-            _,
-            _,
-            attributes,
-        ) = fields
-
-        try:
-            if feature_type in self._g_par["feature_type"]:
-                id = self._attrs_parser(attributes, parsed_key=self._g_par["ID"])
-                gene = Gene(seqid=seqid, id=id, start=start, end=end)
-                self._genome.add_gene(gene)
-                self._last_gene = gene
-            elif feature_type in self._p_par["feature_type"]:
-                id = self._attrs_parser(attributes, parsed_key=self._p_par["ID"])
-                protein = Protein(protein_id=id)
-                protein.gene = self._last_gene if self._last_gene else None
-                self._proteome.add_protein(protein)
-
-        except ValueError as e:
-            raise ValueError(f"Line {line_num}: Error parsing attributes - {e}")
-
-    @abstractmethod
-    def _attrs_parser(self, attr_string, parsed_key):
-        """
-        Abstract method to parse the attributes string for a specific file format.
-        Subclasses must implement this method to parse the attributes.
-        """
-        pass
-
-
-class GFFParser(_GFFGTFParser):
-    """
-    Parse GFF3 attributes field.
-
-    GFF3 format: ID=gene1;Name=MyGene;Note=Some note
-
-    Args:
-        attr_string: The attributes column from a GFF3 line
-
-    Returns:
-        Dictionary of attribute key-value pairs
-    """
-
-    def _attrs_parser(self, attr_string, parsed_key):
-        if not attr_string or attr_string == ".":
-            return None
-
-        for item in attr_string.split(";"):
-            item = item.strip()
-            if "=" in item:
-                key, value = item.split("=", 1)
-                if key == parsed_key:
-                    return value
-        return None
-
-
-class GTFParser(_GFFGTFParser):
-    """
-    Parse GTF attributes field.
-
-    GTF format: gene_id "ENSG00000123"; transcript_id "ENST00000456";
-
-    Args:
-        attr_string: The attributes column from a GTF line
-
-    Returns:
-        Dictionary of attribute key-value pairs
-    """
-
-    def _attrs_parser(self, attr_string, parsed_key):
-        # Split by semicolon and process each key-value pair
-        for item in attr_string.split(";"):
-            item = item.strip()
-            if item:
-                parts = item.split(None, 1)  # Split on first whitespace
-                if len(parts) == 2:
-                    key = parts[0]
-                    value = parts[1].strip('"')  # Remove quotes
-                    if key == parsed_key:
-                        return value
-        return None
-
-
-def read_orthofinder_table(file: str, genomes: dict[str, Genome]) -> list[Orthogroup]:
-    """
-    Read an OrthoFinder Orthogroups.tsv file.
+def read_orthogroup_table(file: str | Path, genomes: dict[str, Genome]) -> list[Orthogroup]:
+    """Read an OrthoFinder-style orthogroups.tsv file.
 
     The file format is tab-separated with:
     - First column: Orthogroup ID
     - Subsequent columns: Gene IDs for each species (column headers are species names)
 
     Args:
-        file_path: Path to the Orthogroups.tsv file
+        file (str | Path): Path to the orthogroups.tsv file
+        genomes (dict[str, Genome]): A dictionary of `Genome` objects keyed by sample name.
 
     Returns:
-        Dictionary mapping orthogroup IDs to dictionaries of species->gene lists
-        Example:
-        {
-            'OG0000001': {
-                'Species1': ['gene1', 'gene2'],
-                'Species2': ['gene3']
-            }
-        }
-
-    Raises:
-        FileNotFoundError: If the file doesn't exist
-        ValueError: If the file format is invalid
+        list[Orthogroup]: A list of parsed Orthogroups.
     """
     file: Path = Path(file)
-
-    orthogroups = []
+    orthogroups: list[Orthogroup] = []
     logger.info(f"Reading Orthogroup file: {file}")
 
     with open(file, "r", encoding="utf-8") as f:
@@ -242,26 +184,16 @@ def read_orthofinder_table(file: str, genomes: dict[str, Genome]) -> list[Orthog
         samples = header[1:]
         logger.info("Found %s samples: %s", len(samples), ", ".join(samples))
         if genomes:
-            sample_set = set(header[1:])
-            genome_keys = set(genomes.keys())
-
-            # Find the difference
-            missing = sample_set - genome_keys
-
+            missing = set(samples) - set(genomes.keys())
             if missing:
-                raise ValueError(
-                    f"The following samples were not found in loaded genomes: {', '.join(missing)}\n"
-                    "Please check whether the samples in the orthogroup file match to the gff files.\n"
-                    f"{genome_keys}"
-                )
+                raise ValueError(f"Samples in OG file not found in loaded genomes: {', '.join(missing)}")
 
         # Read orthogroup data
         for line_num, line in enumerate(f, 2):  # Start at 2 since we read header
-            line = line.strip("\n")
-            if not line:
+            fields = line.strip("\n").split("\t")
+            if not fields[0]:
                 continue
 
-            fields = line.split("\t")
             if len(fields) != len(header):
                 logger.warning(f"Line {line_num}: Expected {len(header)} fields, got {len(fields)}")
                 continue
@@ -270,16 +202,19 @@ def read_orthofinder_table(file: str, genomes: dict[str, Genome]) -> list[Orthog
 
             # Parse genes for each sample
             for i, sample in enumerate(samples, 1):
-                if genomes:
-                    genome = genomes[sample]
-                else:
-                    genome = Genome(sample)
-                genes_str = fields[i].strip()
-                if genes_str:
-                    # Genes are usually separated by commas or spaces
-                    genes = [g.strip() for g in genes_str.replace(",", " ").split() if g.strip()]
-                    for gene in genes:
-                        orthogroup.add_gene(genome[gene])
+                genome = genomes[sample]
+                gene_data = fields[i].strip()
+                if not gene_data:
+                    continue
+
+                # Genes are usually separated by commas or spaces
+                genes = [g.strip() for g in gene_data.replace(",", " ").split()]
+                for gene in genes:
+                    gene_obj = genome._gene_map.get(gene)
+                    if gene_obj:
+                        orthogroup.add_gene(gene_obj)
+                    else:
+                        logger.warning(f"Gene {gene} not found in {sample}")
 
             orthogroups.append(orthogroup)
 
@@ -290,9 +225,20 @@ def read_orthofinder_table(file: str, genomes: dict[str, Genome]) -> list[Orthog
 def save_results_tsv(
     results_gen: Iterator[tuple[str, dict[Genome, list[Gene]]]], all_genomes: list[str], filename: str | Path
 ) -> None:
-    """
-    Format: SOG_ID \t Genome_A \t Genome_B \t ...
-    Where cells contain comma-separated locus_tags.
+    """Save the results to a TSV file.
+
+    This function takes an iterator of orthogroup results and saves them to a tab-separated values (TSV)
+    file. The first column contains the SOG ID, followed by columns for each genome in the `all_genomes` list.
+    For each genome, the function lists the gene IDs associated with the SOG.
+
+    Args:
+        results_gen: An iterator that yields tuples containing an orthogroup ID and a dictionary mapping
+                     genomes to lists of genes.
+        all_genomes (list[str]): A list of genome names corresponding to the columns in the TSV file.
+        filename (str | Path): The path where the resulting TSV file will be saved.
+
+    Returns:
+        None: This function does not return any value; it writes directly to the specified file.
     """
     with open(filename, "w", encoding="utf-8") as f:
         # Write Header
@@ -307,7 +253,7 @@ def save_results_tsv(
                 # (Assuming sog_dict keys are Genome objects)
                 matching_genes = []
                 for genome_obj, genes in sog_dict.items():
-                    if genome_obj.sample_name == g_name:
+                    if genome_obj.name == g_name:
                         matching_genes = [g.id for g in genes]
                         break
 

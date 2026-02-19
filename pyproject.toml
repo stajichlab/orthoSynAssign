@@ -31,7 +31,6 @@ classifiers = [
 ]
 dependencies = [
   "pygenomeviz>=1.6.0",
-  "numpy>=2.0.0",
 ]
 dynamic = ["version"]
 
@@ -43,8 +42,8 @@ dev = [
 ]
 
 [project.scripts]
-orthosynassign = "orthosynassign.main:main"
-orthosynassign-vis = "orthosynassign.visualize:main"
+orthosynassign = "orthosynassign.refine:run_cli"
+orthosynassign-vis = "orthosynassign.visualize:run_cli"
 
 [project.urls]
 "Homepage" = "https://github.com/stajichlab/orthoSynAssign"

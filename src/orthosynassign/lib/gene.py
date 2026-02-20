@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Iterator, Literal
 
 if TYPE_CHECKING:
-    from ._orthogroup import Orthogroup
+    from .orthogroup import Orthogroup
 
 
 class Gene:

@@ -11,8 +11,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Iterator
 
-from ._gene import Gene, Genome
-from ._orthogroup import Orthogroup
+from .gene import Gene, Genome
+from .orthogroup import Orthogroup
 
 logger = logging.getLogger(__name__)
 

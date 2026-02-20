@@ -5,7 +5,7 @@ from itertools import combinations
 from typing import TYPE_CHECKING, Any, Iterator
 
 if TYPE_CHECKING:
-    from ._gene import Gene, Genome
+    from .gene import Gene, Genome
 
 
 class Orthogroup:
@@ -111,7 +111,7 @@ class Orthogroup:
             return []
 
         # Cluster the pairs into SOGs (via BFS/Connected Components)
-        return _consolidate_into_sogs(refined_pairs)
+        return consolidate_into_sogs(refined_pairs)
 
     def _perform_pairwise_comparisons(self, window_size: int, ratio_threshold: float) -> list[tuple[Gene, Gene]]:
         """Internal helper to organize genes by genome and run comparisons.
@@ -181,7 +181,7 @@ def compare_gene_sets(
         max_r = -1.0
 
         for candidate, win_s in secondary_windows.items():
-            ratio = _calculate_synteny_ratio(win_p, win_s)
+            ratio = calculate_synteny_ratio(win_p, win_s)
 
             if ratio >= ratio_threshold and ratio > max_r:
                 max_r = ratio
@@ -272,7 +272,7 @@ def align_sog_dict(sog_dict: dict[Gene, list[Gene]]) -> dict[Gene, list[Gene | N
     return aligned_dict
 
 
-def _calculate_synteny_ratio(win_a: list[str], win_b: list[str]) -> float:
+def calculate_synteny_ratio(win_a: list[str], win_b: list[str]) -> float:
     """Calculates the 1-to-1 synteny match ratio between two dynamic windows.
 
     Specifically, this function computes the ratio of overlapping orthogroups present in both window sets. The overlap is
@@ -299,7 +299,7 @@ def _calculate_synteny_ratio(win_a: list[str], win_b: list[str]) -> float:
     return matches / max(len(win_a), len(win_b))
 
 
-def _consolidate_into_sogs(pairs: list[tuple[Gene, Gene]]) -> list[dict[Genome, list[Gene]]]:
+def consolidate_into_sogs(pairs: list[tuple[Gene, Gene]]) -> list[dict[Genome, list[Gene]]]:
     """Consolidates a list of gene pairs into Syntenic Orthologous Groups (SOGs).
 
     This function uses the provided list of syntenically supported orthologous pairs to construct connected components within a

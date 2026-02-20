@@ -14,6 +14,8 @@ in handling large datasets.
 
 First, install the package following the [instruction](#install) below.
 
+### Refine orthogroups by synteny analysis
+
 `orthosynassign` is the main program for running the analysis. It takes the OrthoFinder-style `orthogroup.tsv` or the `N0.tsv`
 under phylogenetic hierarchical orthogroups directory and output the refined orthogroups with synteny information determined using
 the genome annotation files.
@@ -51,6 +53,25 @@ Options:
   -h, --help            show this help message and exit
 ```
 
+We provided some example files in directory `example`, which contains three BED annotations and a orthogroup file:
+
+```
+FungiDB-68_AfumigatusA1163.bed
+FungiDB-68_AfumigatusAf293.bed
+FungiDB-68_AnovofumigatusIBT16806.bed
+orthogroups.tsv
+```
+
+Use the following command to run the refinement process:
+
+```bash
+orthosynassign --og_file orthogroups.tsv --bed *.bed -o Refined_SOGs.tsv
+```
+
+The refined result will output to `Refined_SOGs.tsv`.
+
+### Visualize the refined orthogroups
+
 `orthosynassign-vis` is a companion visualization script to verify the refined results of `orthosynassign`. It utilizes the
 [pyGenomeViz] to plot the orthogroups and their synteny relationships. It takes the original, unrefined `orthogroup.tsv` file along
 with the refined orthogroup file to plot a certain set of refined orthogroups using their previous orthogroup IDs as the labels
@@ -75,9 +96,16 @@ Options:
   -h, --help            show this help message and exit
 ```
 
-Here is an example of a refined orthogroup. The genes of the observed refined orthogroup are labelled in yellow; genes assigned to
-the same orthogroup within this given window are labelled in other chromatic colors; genes with orthologs in other genomes located
-outside the given window are labelled in gray.
+The `example` directory contains another refined orthogroup file - `Refined_SOGs.tsv`, say if we want to verify one of the refined
+orthogroup `SOG000032.OG0000040`:
+
+```bash
+orthosynassign-vis --og_file orthogroups.tsv --sog_file Refined_SOGs.tsv --bed *.bed --sog SOG000032.OG0000040 -f svg
+```
+
+The figure will output to `visualize_Refined_SOGs/SOG000032.OG0000040.svg`. In this figure, the genes of the observed refined
+orthogroup are labelled in yellow; genes assigned to the same orthogroup within this given window are labelled in other chromatic
+colors; genes with orthologs in other genomes located outside the given window are labelled in gray.
 
 <img src= "misc/SOG000032.OG0000040.svg" alt="A refined orthogroup SOG000032" width="800">
 

@@ -28,21 +28,7 @@ def args_factory() -> Namespace:
     return create_args
 
 
-@pytest.fixture
-def mock_refine_dependencies(monkeypatch: pytest.MonkeyPatch):
-    """Fixture to mock all heavy dependencies in the refine module."""
-    # Mocking external file/validation calls
-    monkeypatch.setattr("orthosynassign.refine.setup_logging", lambda x: None)
-    monkeypatch.setattr("orthosynassign.refine.validate_annotations", lambda x: [])
-    monkeypatch.setattr("orthosynassign.refine.validate_orthogroup", lambda x: x)
-    monkeypatch.setattr("orthosynassign.refine.read_og_table", lambda x, y: {})
-    monkeypatch.setattr("orthosynassign.refine._generate_sog_results", lambda a, b, c, cpus: iter([]))
-    monkeypatch.setattr("orthosynassign.refine.write_og_table", lambda a, b, c: None)
-
-    # Mock Path.mkdir and Path.unlink to prevent actual disk changes
-    monkeypatch.setattr(Path, "mkdir", lambda *args, **kwargs: None)
-    monkeypatch.setattr(Path, "unlink", lambda self, missing_ok=True: None)
-    monkeypatch.setattr(Path, "replace", lambda self, target: None)
+# --- run_cli ---
 
 
 class TestRunCli:
@@ -118,6 +104,26 @@ class TestRunCli:
         assert excinfo.value.code == 2
 
 
+# --- main ---
+
+
+@pytest.fixture
+def mock_refine_dependencies(monkeypatch: pytest.MonkeyPatch):
+    """Fixture to mock all heavy dependencies in the refine module."""
+    # Mocking external file/validation calls
+    monkeypatch.setattr("orthosynassign.refine.setup_logging", lambda x: None)
+    monkeypatch.setattr("orthosynassign.refine.validate_annotations", lambda x: [])
+    monkeypatch.setattr("orthosynassign.refine.validate_orthogroup", lambda x: x)
+    monkeypatch.setattr("orthosynassign.refine.read_og_table", lambda x, y: {})
+    monkeypatch.setattr("orthosynassign.refine._generate_sog_results", lambda a, b, c, cpus: iter([]))
+    monkeypatch.setattr("orthosynassign.refine.write_og_table", lambda a, b, c: None)
+
+    # Mock Path.mkdir and Path.unlink to prevent actual disk changes
+    monkeypatch.setattr(Path, "mkdir", lambda *args, **kwargs: None)
+    monkeypatch.setattr(Path, "unlink", lambda self, missing_ok=True: None)
+    monkeypatch.setattr(Path, "replace", lambda self, target: None)
+
+
 class TestMain:
     def test_main_success(self, args_factory, mock_refine_dependencies):
         """Test that main returns 0 on a successful run."""
@@ -167,7 +173,7 @@ class TestMain:
         cleanup_called = False
 
         def mock_unlink(self, missing_ok=True):
-            nonlocal cleanup_called     # Modify cleanup_called in the outer scope
+            nonlocal cleanup_called  # Modify cleanup_called in the outer scope
             cleanup_called = True
 
         # Check if tmp_output.unlink() is called

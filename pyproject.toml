@@ -54,7 +54,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-addopts = "-ra -vv --order-dependencies"
+addopts = "-ra -vv"
 testpaths = ["tests"]
 
 [tool.versioningit.vcs]

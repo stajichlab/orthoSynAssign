@@ -8,9 +8,12 @@ import argparse
 import logging
 import re
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
-from .lib.parsers import AnnotationParser, BedParser
+from .lib import BedParser
+
+if TYPE_CHECKING:
+    from .lib._parsers import AnnotationParser
 
 logger = logging.getLogger(__name__)
 

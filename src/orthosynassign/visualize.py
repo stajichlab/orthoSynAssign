@@ -9,7 +9,6 @@ import argparse
 import logging
 import sys
 import textwrap
-import traceback
 from collections import Counter
 from itertools import combinations
 from pathlib import Path
@@ -20,12 +19,10 @@ from pygenomeviz.utils import ColorCycler
 
 from . import AUTHOR, VERSION
 from ._utils import CustomHelpFormatter, VisualizeArgs, setup_logging, validate_annotations, validate_orthogroup
-from .lib._orthogroup import align_sog_dict, get_shared_ogs
-from .lib.parsers import read_orthogroup_table
+from .lib import align_sog_dict, get_shared_ogs, read_og_table
 
 if TYPE_CHECKING:
-    from .lib._gene import Gene
-    from .lib._orthogroup import Orthogroup
+    from .lib import Gene, Orthogroup
 
 _EPILOG = textwrap.dedent(f"""\
 Examples:
@@ -87,9 +84,9 @@ def main(args: VisualizeArgs) -> int:
 
         # Read orthogroups
         logger.info("Reading orthogroup data from: %s", og_file)
-        refined_orthogroups = {og.id: og for og in read_orthogroup_table(sog_file, genomes)}
+        refined_orthogroups = {og.id: og for og in read_og_table(sog_file, genomes)}
         # Overwrite the Gene.orthogroup attribute with original og ids
-        _ = read_orthogroup_table(og_file, genomes)
+        _ = read_og_table(og_file, genomes)
 
         # Create output directory
         if args.output is None:
@@ -121,11 +118,16 @@ def main(args: VisualizeArgs) -> int:
 
     except KeyboardInterrupt:
         logger.warning("Terminated by user.")
-        return 1
+        return 130
+
+    except FileNotFoundError as e:
+        logger.error("An error occurred: %s", e)
+        logger.debug("Traceback details:", exc_info=True)
+        return 2
 
     except Exception as e:
-        logger.error(f"An error occurred: {e}")
-        logger.debug("%s", traceback.format_exc())
+        logger.error("An error occurred: %s", e)
+        logger.debug("Traceback details:", exc_info=True)
         return 1
 
     return 0

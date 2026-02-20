@@ -156,7 +156,7 @@ class BedParser(AnnotationParser):
         self._genome.add_gene(Gene(seqid=seqid, start=int(start), end=int(end), gene_id=name))
 
 
-def read_orthogroup_table(file: str | Path, genomes: dict[str, Genome]) -> list[Orthogroup]:
+def read_og_table(file: str | Path, genomes: dict[str, Genome]) -> list[Orthogroup]:
     """Read an OrthoFinder-style orthogroups.tsv file.
 
     The file format is tab-separated with:
@@ -222,10 +222,10 @@ def read_orthogroup_table(file: str | Path, genomes: dict[str, Genome]) -> list[
     return orthogroups
 
 
-def save_results_tsv(
+def write_og_table(
     results_gen: Iterator[tuple[str, dict[Genome, list[Gene]]]], all_genomes: list[str], filename: str | Path
 ) -> None:
-    """Save the results to a TSV file.
+    """Write to an OrthoFinder-style orthogroups.tsv file.
 
     This function takes an iterator of orthogroup results and saves them to a tab-separated values (TSV)
     file. The first column contains the SOG ID, followed by columns for each genome in the `all_genomes` list.

@@ -22,11 +22,10 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 from . import AUTHOR, VERSION
 from . import __doc__ as _module_doc
 from ._utils import CustomHelpFormatter, RefineArgs, setup_logging, validate_annotations, validate_orthogroup
-from .lib.parsers import read_orthogroup_table, save_results_tsv
+from .lib import read_og_table, write_og_table
 
 if TYPE_CHECKING:
-    from .lib._gene import Gene, Genome
-    from .lib._orthogroup import Orthogroup
+    from .lib import Gene, Genome, Orthogroup
 
 _EPILOG = textwrap.dedent(f"""\
 Examples:
@@ -97,13 +96,13 @@ def main(args: RefineArgs) -> int:
 
         # Read orthogroup
         logger.info("Reading orthogroup data from: %s", og_file)
-        orthogroups = read_orthogroup_table(og_file, genomes)
+        orthogroups = read_og_table(og_file, genomes)
 
         # Perform synteny analysis
         logger.info("Refining orthogroups by pairwise synteny analysis.")
         results_stream = _generate_sog_results(orthogroups, genomes, args, cpus=args.threads)
 
-        save_results_tsv(results_stream, list(genomes.keys()), tmp_output)
+        write_og_table(results_stream, list(genomes.keys()), tmp_output)
         tmp_output.replace(output_path)
         logger.info("Refinement complete. Results saved to %s", args.output)
 
@@ -111,7 +110,12 @@ def main(args: RefineArgs) -> int:
 
     except KeyboardInterrupt:
         logger.warning("Terminated by user.")
-        return 1
+        return 130
+
+    except FileNotFoundError as e:
+        logger.error("An error occurred: %s", e)
+        logger.debug("Traceback details:", exc_info=True)
+        return 2
 
     except Exception as e:
         logger.error("An error occurred: %s", e)

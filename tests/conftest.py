@@ -1,3 +1,4 @@
+import pandas as pd
 import pytest
 
 from orthosynassign.lib import Gene, Genome, Orthogroup
@@ -61,3 +62,26 @@ def og_factory():
         return Orthogroup(og_id)
 
     return _make
+
+
+@pytest.fixture
+def read_example_files(gene_factory, genome_factory, og_factory):
+    ogs_df: pd.DataFrame = pd.read_csv("tests/data/orthogroups.tsv", sep="\t", index_col=0)
+    genomes = {}
+    for sample in ogs_df.columns:
+        df: pd.DataFrame = pd.read_csv(f"tests/data/{sample}.bed", sep="\t", header=None)
+        df = df[[3, 0, 1, 2]]
+        genome = genome_factory(sample)
+        for idx, row in df.iterrows():
+            genome.add_gene(gene_factory(*row.values))
+        genomes[sample] = genome
+
+    ogs = []
+    for og_id, row in ogs_df.iterrows():
+        og = og_factory(og_id)
+        for genes, genome in zip(row.values, genomes.values()):
+            for gene in genes.split(","):
+                og.add_gene(genome[gene.strip()])
+        ogs.append(og)
+
+    return genomes, ogs

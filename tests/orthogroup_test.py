@@ -2,6 +2,8 @@ import pickle
 
 import pytest
 
+from orthosynassign.lib import compare_gene_sets, get_shared_ogs
+
 
 @pytest.fixture
 def og(og_factory):
@@ -132,3 +134,146 @@ class TestOrthogroupSerialization:
         assert restored[0].id == "G1"
         # Ensure the back-pointer to the Orthogroup is still the restored object
         assert restored[0].orthogroup is restored
+
+
+@pytest.fixture
+def prepared_comparison(request, read_example_files):
+    """
+    Bridge fixture: Converts lists of string IDs into lists of Gene objects.
+    """
+    genome_names, gene_id_lists, expected_id_list = request.param
+    genomes, _ = read_example_files
+
+    # Resolve Genome objects
+    genome_a = genomes[genome_names[0]]
+    genome_b = genomes[genome_names[1]]
+
+    # Resolve Focal Gene Lists (handling potential missing genes)
+    genes_a = [genome_a[gid] for gid in gene_id_lists[0]]
+    genes_b = [genome_b[gid] for gid in gene_id_lists[1]]
+
+    # Resolve Expected Result List
+    # Returns a list of tuples (GeneA, GeneB) if expected exists, else empty list
+    expected = []
+    if expected_id_list:
+        # Assuming the expected_id_list is formatted as ([idA], [idB])
+        for id_a, id_b in zip(expected_id_list[0], expected_id_list[1]):
+            expected.append((genome_a[id_a], genome_b[id_b]))
+
+    return (genes_a, genes_b), expected
+
+
+class TestCompareGeneSets:
+    @pytest.mark.parametrize(
+        "prepared_comparison",
+        [
+            # Case 1: Perfect match (A6-B6)
+            # Format: ((Genomes), ([ListA], [ListB]), ([ExpectedA], [ExpectedB]))
+            (("Sample_A", "Sample_B"), (["A6"], ["B6"]), (["A6"], ["B6"])),
+            # Case 2: No match (Noise)
+            (("Sample_A", "Sample_B"), (["A14"], ["B14"]), None),
+            # Case 3: Multiple candidates (Paralog selection)
+            # Testing if A2 picks the correct B candidate from a list
+            (("Sample_A", "Sample_B"), (["A2"], ["B2", "B2b"]), (["A2"], ["B2"])),
+            # Case 4: Multiple candidates (Entire duplication)
+            (("Sample_A", "Sample_B"), (["A23", "A23b"], ["B23", "B23b"]), (["A23", "A23b"], ["B23", "B23b"])),
+        ],
+        indirect=["prepared_comparison"],
+    )
+    def test_compare_gene_sets_using_example_files(self, prepared_comparison):
+        """Test syntenic identification with list-based inputs."""
+        (genes_a, genes_b), expected = prepared_comparison
+
+        # window_size and ratio_threshold match your example file parameters
+        refined_results = compare_gene_sets(genes_a, genes_b, window_size=4, ratio_threshold=0.5)
+
+        # We compare the list of tuples directly
+        assert refined_results == expected
+
+
+class TestGetSharedOGs:
+    def test_basic_intersection(self, genome_factory, gene_factory, og_factory):
+        """Test that only OGs present in both genomes are returned."""
+        genome_a = genome_factory("Genome_A")
+        genome_b = genome_factory("Genome_B")
+
+        # Shared OGs
+        og_shared = og_factory("OG_SHARED")
+        # Unique OGs
+        og_a_only = og_factory("OG_A")
+        og_b_only = og_factory("OG_B")
+
+        # Setup Genome A: has Shared and A_only
+        g1 = gene_factory("G1")
+        g2 = gene_factory("G2")
+        genome_a.add_gene(g1)
+        genome_a.add_gene(g2)
+
+        # Setup Genome B: has Shared and B_only
+        g3 = gene_factory("G3")
+        g4 = gene_factory("G4")
+        genome_b.add_gene(g3)
+        genome_b.add_gene(g4)
+
+        og_shared.add_gene(g1)
+        og_a_only.add_gene(g2)
+        og_shared.add_gene(g3)
+        og_b_only.add_gene(g4)
+
+        shared = get_shared_ogs(genome_a, genome_b)
+
+        assert shared == {"OG_SHARED"}
+        assert "OG_A" not in shared
+        assert "OG_B" not in shared
+
+    def test_handling_missing_orthogroups(self, genome_factory, gene_factory, og_factory):
+        """Test that genes with .orthogroup = None are ignored safely."""
+        genome_a = genome_factory("Genome_A")
+        genome_b = genome_factory("Genome_B")
+
+        og_shared = og_factory("OG1")
+
+        # Gene with an OG
+        g_a1 = gene_factory("A1")
+        g_b1 = gene_factory("B1")
+
+        # Genes WITHOUT an OG
+        g_orphan_a = gene_factory("OrphanA")  # .orthogroup is None by default
+        g_orphan_b = gene_factory("OrphanB")
+
+        genome_a.add_gene(g_a1)
+        genome_a.add_gene(g_orphan_a)
+        genome_b.add_gene(g_b1)
+        genome_b.add_gene(g_orphan_b)
+
+        og_shared.add_gene(g_a1)
+        og_shared.add_gene(g_b1)
+
+        shared = get_shared_ogs(genome_a, genome_b)
+
+        # Should only contain OG1, and should not crash/contain None
+        assert shared == {"OG1"}
+
+    def test_no_overlap(self, genome_factory, gene_factory, og_factory):
+        """Test return value is an empty set when no OGs are shared."""
+        genome_a = genome_factory("Genome_A")
+        genome_b = genome_factory("Genome_B")
+        og_a = og_factory("OG_A")
+        og_b = og_factory("OG_B")
+
+        g1 = gene_factory("A")
+        g2 = gene_factory("B")
+        genome_a.add_gene(g1)
+        genome_b.add_gene(g2)
+
+        og_a.add_gene(g1)
+        og_b.add_gene(g2)
+
+        assert get_shared_ogs(genome_a, genome_b) == set()
+
+    def test_empty_genomes(self, genome_factory):
+        """Test that empty genomes return an empty set."""
+        genome_a = genome_factory("Empty_A")
+        genome_b = genome_factory("Empty_B")
+
+        assert get_shared_ogs(genome_a, genome_b) == set()

@@ -249,8 +249,8 @@ def write_og_table(results_gen: Iterator[SOG], all_genomes: list[str], filename:
             row = [sog.id]
             sog_dict = defaultdict(list)
             for g in sog:
-                sog_dict[g.genome].append(g)
+                sog_dict[g.genome.name].append(g)
             for g_name in all_genomes:
                 matching_genes = sog_dict.get(g_name, None)
-                row.append(",".join(matching_genes) if matching_genes else "")
+                row.append(",".join(g.id for g in matching_genes) if matching_genes else "")
             f.write("\t".join(row) + "\n")

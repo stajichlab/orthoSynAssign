@@ -2,7 +2,7 @@ import pickle
 
 import pytest
 
-from orthosynassign.lib import align_sog_dict, calculate_synteny_ratio, compare_gene_sets, get_shared_ogs
+from orthosynassign.lib import SOG, align_sog_dict, calculate_synteny_ratio, compare_gene_sets, get_shared_ogs
 
 
 @pytest.fixture
@@ -31,8 +31,9 @@ class TestOrthogroupBasics:
         og.add_gene(gene)
 
         assert len(og) == 1
+        assert gene in og
         assert og[0] == gene
-        assert gene.orthogroup == og
+        assert gene.og == og
         assert gene.genome == genome
         assert gene.index == 0
 
@@ -55,9 +56,9 @@ class TestOrthogroupBasics:
 
 
 class TestOrthogroupRefinement:
-    def test_get_refined_sogs_integration(self, gene_factory, genome_factory, og_factory, og) -> None:
+    def test_refine_integration(self, gene_factory, genome_factory, og_factory, og) -> None:
         """
-        Tests the full flow of get_refined_sogs using real functions.
+        Tests the full flow of refine using real functions.
         This ensures Orthogroup, compare_gene_sets, and consolidate_into_sogs
         all talk to each other correctly.
         """
@@ -91,15 +92,17 @@ class TestOrthogroupRefinement:
 
         # 2. Run the actual logic
         # ratio_threshold=1.0 ensures they MUST match perfectly
-        result = og.get_refined_sogs(window_size=2, ratio_threshold=1.0)
+        result = og.refine(window_size=2, ratio_threshold=1.0)
 
         # 3. Assertions
         assert len(result) == 1
         sog = result[0]
-        assert g_a_focal in sog[genome_a]
-        assert g_b_focal in sog[genome_b]
+        print(sog)
+        print(sog._genes)
+        assert g_a_focal in sog
+        assert g_b_focal in sog
 
-    def test_get_refined_sogs_no_synteny_found(self, gene_factory, genome_factory, og):
+    def test_refine_no_synteny_found(self, gene_factory, genome_factory, og):
         """Test that an OG with no syntenic support returns an empty list."""
         genome_a = genome_factory("Genome_A")
         genome_b = genome_factory("Genome_B")
@@ -114,7 +117,7 @@ class TestOrthogroupRefinement:
         og.add_gene(g_b)
 
         # Since there are no shared neighbors, this should return []
-        result = og.get_refined_sogs(window_size=4, ratio_threshold=0.5)
+        result = og.refine(window_size=4, ratio_threshold=0.5)
         assert result == []
 
 
@@ -133,7 +136,85 @@ class TestOrthogroupSerialization:
         assert len(restored) == 1
         assert restored[0].id == "G1"
         # Ensure the back-pointer to the Orthogroup is still the restored object
-        assert restored[0].orthogroup is restored
+        assert restored[0].og is restored
+
+
+class TestSOG:
+    def test_sog_initialization(self, gene_factory):
+        """Verify that SOG initializes with genes and sets their sog pointer."""
+        g1 = gene_factory("G1")
+        g2 = gene_factory("G2")
+        genes = [g1, g2]
+
+        sog = SOG(sog_id="OG001.SOG1", genes=genes)
+
+        # Check basic identity
+        assert sog.id == "OG001.SOG1"
+        assert len(sog) == 2
+
+        # Check that the SOG contains the genes
+        assert g1 in sog
+        assert g2 in sog
+
+        # CRITICAL: Verify the gene.sog pointer was set by the add_gene override
+        assert g1.sog == sog
+        assert g2.sog == sog
+
+    def test_sog_add_gene_idempotency(self, gene_factory):
+        """Ensure adding the same gene twice doesn't duplicate it in the SOG."""
+        g1 = gene_factory("G1")
+        sog = SOG(sog_id="SOG1")
+
+        sog.add_gene(g1)
+        sog.add_gene(g1)  # Duplicate add
+
+        assert len(sog) == 1
+        assert sog._genes == [g1]
+
+    def test_sog_refine_raises_error(self, gene_factory):
+        """Verify that calling refine() on a SOG raises NotImplementedError."""
+        sog = SOG(sog_id="SOG1")
+
+        with pytest.raises(NotImplementedError, match="SOG objects are already refined"):
+            sog.refine(window_size=5, ratio_threshold=0.5)
+
+    def test_inheritance_properties(self, gene_factory):
+        """Ensure SOG still behaves like an Orthogroup (iteration, indexing)."""
+        g1, g2 = gene_factory("G1"), gene_factory("G2")
+        sog = SOG(sog_id="SOG1", genes=[g1, g2])
+
+        # Test __getitem__
+        assert sog[0] == g1
+
+        # Test __iter__
+        iterated_genes = list(sog)
+        assert iterated_genes == [g1, g2]
+
+        # Test __repr__
+        assert "SOG1" in repr(sog)
+        assert "2 genes" in repr(sog)
+
+    def test_gene_repr_priority_with_sog(self, gene_factory):
+        """
+        Verify that the Gene.__repr__ we modified correctly prioritizes
+        the SOG ID over the OG ID.
+        """
+        # (Assuming you have a mock/factory for OG as well)
+        from orthosynassign.lib.orthogroup import Orthogroup
+
+        g1 = gene_factory("G1")
+        og = Orthogroup("OG0001")
+        og.add_gene(g1)
+
+        # Before SOG assignment, should show OG ID
+        assert "OG0001" in repr(g1)
+
+        # After SOG assignment, should show SOG ID
+        sog = SOG("SOG1")
+        sog.add_gene(g1)
+
+        assert "SOG1" in repr(g1)
+        assert "OG0001" not in repr(g1)  # SOG should hide OG in repr
 
 
 @pytest.fixture
@@ -227,7 +308,7 @@ class TestGetSharedOGs:
         assert "OG_B" not in shared
 
     def test_handling_missing_orthogroups(self, genome_factory, gene_factory, og_factory):
-        """Test that genes with .orthogroup = None are ignored safely."""
+        """Test that genes with .og = None are ignored safely."""
         genome_a = genome_factory("Genome_A")
         genome_b = genome_factory("Genome_B")
 
@@ -238,7 +319,7 @@ class TestGetSharedOGs:
         g_b1 = gene_factory("B1")
 
         # Genes WITHOUT an OG
-        g_orphan_a = gene_factory("OrphanA")  # .orthogroup is None by default
+        g_orphan_a = gene_factory("OrphanA")  # .og is None by default
         g_orphan_b = gene_factory("OrphanB")
 
         genome_a.add_gene(g_a1)

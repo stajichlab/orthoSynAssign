@@ -18,14 +18,18 @@ class Orthogroup:
 
     __slots__ = ("id", "_genes")
 
-    def __init__(self, og_id: str) -> None:
-        """Initialize an Orthogroup with a given ID.
+    def __init__(self, og_id: str | None = None, genes: list[Gene] | None = None) -> None:
+        """Initialize an Orthogroup.
 
         Args:
             og_id (str): The unique identifier for the orthogroup.
+            genes (list[Gene]): The genes in the orthogroup.
         """
         self.id = og_id
         self._genes: list[Gene] = []
+        if genes:
+            for gene in genes:
+                self.add_gene(gene)
 
     def __repr__(self) -> str:
         """Return a string representation of the Orthogroup.
@@ -33,7 +37,8 @@ class Orthogroup:
         Returns:
             str: A string in the format "[{id} | with {len(self._genes)} genes]".
         """
-        return f"[{self.id} | with {len(self._genes)} genes]"
+        og_id = self.id if self.id else "Unnamed orthogroup"
+        return f"[{og_id} | with {len(self._genes)} genes]"
 
     def __len__(self) -> int:
         """Return the number of genes in the Orthogroup.
@@ -53,6 +58,10 @@ class Orthogroup:
             Gene: The gene at the specified index.
         """
         return self._genes[index]
+
+    def __contains__(self, item: Gene) -> bool:
+        """Allows for 'gene in orthogroup' syntax."""
+        return item in self._genes
 
     def __iter__(self) -> Iterator[Gene]:
         """Return an iterator over the genes in the Orthogroup.
@@ -79,20 +88,19 @@ class Orthogroup:
         for slot, value in state.items():
             setattr(self, slot, value)
 
-    def add_gene(self, gene_obj: Gene) -> None:
+    def add_gene(self, gene: Gene) -> None:
         """Add a gene to the Orthogroup.
 
-        If the gene is not already present in the Orthogroup, it will be added and its orthogroup attribute set to this
-        Orthogroup.
+        If the gene is not already present in the Orthogroup, it will be added and its og attribute set to this Orthogroup.
 
         Args:
-            gene_obj (Gene): The gene to add.
+            gene (Gene): The gene to add.
         """
-        if gene_obj not in self._genes:
-            gene_obj.orthogroup = self
-            self._genes.append(gene_obj)
+        if gene not in self._genes:
+            gene.og = self
+            self._genes.append(gene)
 
-    def get_refined_sogs(self, window_size: int, ratio_threshold: float) -> list[dict[Genome, list[Gene]]]:
+    def refine(self, window_size: int, ratio_threshold: float) -> list[SOG]:
         """Refine the orthologous gene groups (SOGs) within the orthogroup by finding syntenic 'edges' using pairwise comparisons.
 
         Args:
@@ -100,11 +108,10 @@ class Orthogroup:
             ratio_threshold (float): The threshold ratio used to determine if a pair of genes is considered syntenic.
 
         Returns:
-            list[dict[Genome, list[Gene]]]: A list of dictionaries, each representing a refined SOG with genome keys and gene
-            lists as values.
+            list[SOG]: A list of SOG (refined orthogroup) objects.
         """
         # Find the syntenic 'edges' using pairwise comparisons
-        refined_pairs = self._perform_pairwise_comparisons(window_size, ratio_threshold)
+        refined_pairs = _perform_pairwise_comparisons(self, window_size, ratio_threshold)
 
         # If no pairs pass, the OG is essentially unsupported/fragmented
         if not refined_pairs:
@@ -113,26 +120,35 @@ class Orthogroup:
         # Cluster the pairs into SOGs (via BFS/Connected Components)
         return consolidate_into_sogs(refined_pairs)
 
-    def _perform_pairwise_comparisons(self, window_size: int, ratio_threshold: float) -> list[tuple[Gene, Gene]]:
-        """Internal helper to organize genes by genome and run comparisons.
+
+class SOG(Orthogroup):
+    def __init__(self, sog_id: str | None = None, genes: list[Gene] | None = None) -> None:
+        """Initialize an SOG.
 
         Args:
-            window_size (int): The size of the window used for synteny comparison.
-            ratio_threshold (float): The threshold for the ratio of overlapping genes to consider two genes as syntenic.
-
-        Returns:
-            list[tuple[Gene, Gene]]: A list of refined pairs of genes that are considered syntenic based on the given criteria.
+            og_id (str): The unique identifier for the sog.
+            genes (list[Gene]): The genes in the sog.
         """
-        genes_by_genome = defaultdict(list)
-        for gene in self:
-            genes_by_genome[gene.genome].append(gene)
+        super().__init__(sog_id, genes)
 
-        all_refined_pairs = []
-        # Combinations ensures we only compare Genome A to Genome B once
-        for genome_a, genome_b in combinations(genes_by_genome.keys(), 2):
-            pairs = compare_gene_sets(genes_by_genome[genome_a], genes_by_genome[genome_b], window_size, ratio_threshold)
-            all_refined_pairs.extend(pairs)
-        return all_refined_pairs
+    def add_gene(self, gene: Gene):
+        """Add a gene to the SOG.
+
+        If the gene is not already present in the SOG, it will be added and its og attribute set to this SOG.
+
+        Args:
+            gene (Gene): The gene to add.
+        """
+        if gene not in self._genes:
+            gene.sog = self
+            self._genes.append(gene)
+
+    def refine(self, *args, **kwargs):
+        """
+        Disable this because a SOG is already refined.
+        It shouldn't be refined again.
+        """
+        raise NotImplementedError("SOG objects are already refined and cannot be refined further.")
 
 
 def compare_gene_sets(
@@ -166,7 +182,7 @@ def compare_gene_sets(
 
     # Pre-calculate all windows for the secondary set
     secondary_windows = {
-        gene: [g.orthogroup.id for g in genome_b.get_window(gene, shared_ogs, window_size) if g.orthogroup] for gene in secondary
+        gene: [g.og.id for g in genome_b.get_window(gene, shared_ogs, window_size) if g.og] for gene in secondary
     }
 
     refined_pairs = []
@@ -174,7 +190,7 @@ def compare_gene_sets(
     # Compare windows
     for focal_gene in primary:
         genes = focal_gene.genome.get_window(focal_gene, shared_ogs, window_size)
-        win_p = [g.orthogroup.id for g in genes if g.orthogroup]
+        win_p = [g.og.id for g in genes if g.og]
 
         # Find the best match
         best_candidate = None
@@ -206,8 +222,8 @@ def get_shared_ogs(genome_a: Genome, genome_b: Genome) -> set[str]:
     Returns:
         set[str]: A set of Orthogroup IDs that are common to both genomes.
     """
-    ogs_a = {g.orthogroup.id for g in genome_a if g.orthogroup}
-    ogs_b = {g.orthogroup.id for g in genome_b if g.orthogroup}
+    ogs_a = {g.og.id for g in genome_a if g.og}
+    ogs_b = {g.og.id for g in genome_b if g.og}
 
     return ogs_a.intersection(ogs_b)
 
@@ -299,7 +315,7 @@ def calculate_synteny_ratio(win_a: list[str], win_b: list[str]) -> float:
     return matches / max(len(win_a), len(win_b))
 
 
-def consolidate_into_sogs(pairs: list[tuple[Gene, Gene]]) -> list[dict[Genome, list[Gene]]]:
+def consolidate_into_sogs(pairs: list[tuple[Gene, Gene]]) -> list[SOG]:
     """Consolidates a list of gene pairs into Syntenic Orthologous Groups (SOGs).
 
     This function uses the provided list of syntenically supported orthologous pairs to construct connected components within a
@@ -310,8 +326,7 @@ def consolidate_into_sogs(pairs: list[tuple[Gene, Gene]]) -> list[dict[Genome, l
         different genomes.
 
     Returns:
-        list[dict[Genome, list[Gene]]]: A list of SOGs. Each SOG is represented as a dictionary where keys are genomes and values
-        are lists of genes from that genome belonging to the SOG.
+        list[SOG]: A list of SOG (refined orthogroup) objects.
     """
     # Build an adjacency list (the graph)
     adj = defaultdict(list)
@@ -322,7 +337,7 @@ def consolidate_into_sogs(pairs: list[tuple[Gene, Gene]]) -> list[dict[Genome, l
         nodes.update([u, v])
 
     visited = set()
-    sog_clusters = []
+    sog_clusters: list[SOG] = []
 
     # Traverse the graph to find connected components
     for node in nodes:
@@ -342,24 +357,28 @@ def consolidate_into_sogs(pairs: list[tuple[Gene, Gene]]) -> list[dict[Genome, l
                         queue.append(neighbor)
 
             # Format the cluster
-            sog_clusters.append(_format_as_sog_dict(component))
+            sog_clusters.append(SOG(genes=component))
 
     return sog_clusters
 
 
-def _format_as_sog_dict(gene_list: list[Gene]) -> dict[Genome, list[Gene]]:
-    """Formats a list of genes into a dictionary that maps each genome to its corresponding genes in the list.
-
-    This function is used to convert a list of genes into a SOG dictionary format, where the keys are genomes and the values are
-    lists of genes from that genome present in the input list.
+def _perform_pairwise_comparisons(orthogroup: Orthogroup, window_size: int, ratio_threshold: float) -> list[tuple[Gene, Gene]]:
+    """A helper function to organize genes by genome and run comparisons.
 
     Args:
-        gene_list (list[Gene]): A list of Gene objects.
+        window_size (int): The size of the window used for synteny comparison.
+        ratio_threshold (float): The threshold for the ratio of overlapping genes to consider two genes as syntenic.
 
     Returns:
-        dict[Genome, list[Gene]]: A dictionary mapping each genome to a list of genes from that genome.
+        list[tuple[Gene, Gene]]: A list of refined pairs of genes that are considered syntenic based on the given criteria.
     """
-    sog = defaultdict(list)
-    for g in gene_list:
-        sog[g.genome].append(g)
-    return dict(sog)
+    genes_by_genome = defaultdict(list)
+    for gene in orthogroup:
+        genes_by_genome[gene.genome].append(gene)
+
+    all_refined_pairs = []
+    # Combinations ensures we only compare Genome A to Genome B once
+    for genome_a, genome_b in combinations(genes_by_genome.keys(), 2):
+        pairs = compare_gene_sets(genes_by_genome[genome_a], genes_by_genome[genome_b], window_size, ratio_threshold)
+        all_refined_pairs.extend(pairs)
+    return all_refined_pairs

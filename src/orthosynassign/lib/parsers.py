@@ -8,11 +8,12 @@ import gzip
 import logging
 import re
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterator
 
 from .gene import Gene, Genome
-from .orthogroup import Orthogroup
+from .orthogroup import SOG, Orthogroup
 
 logger = logging.getLogger(__name__)
 
@@ -222,9 +223,7 @@ def read_og_table(file: str | Path, genomes: dict[str, Genome]) -> list[Orthogro
     return orthogroups
 
 
-def write_og_table(
-    results_gen: Iterator[tuple[str, dict[Genome, list[Gene]]]], all_genomes: list[str], filename: str | Path
-) -> None:
+def write_og_table(results_gen: Iterator[SOG], all_genomes: list[str], filename: str | Path) -> None:
     """Write to an OrthoFinder-style orthogroups.tsv file.
 
     This function takes an iterator of orthogroup results and saves them to a tab-separated values (TSV)
@@ -246,16 +245,12 @@ def write_og_table(
         f.write("\t".join(header) + "\n")
 
         # Write Rows
-        for sog_id, sog_dict in results_gen:
-            row = [sog_id]
+        for sog in results_gen:
+            row = [sog.id]
+            sog_dict = defaultdict(list)
+            for g in sog:
+                sog_dict[g.genome].append(g)
             for g_name in all_genomes:
-                # Find the genome object that matches the name
-                # (Assuming sog_dict keys are Genome objects)
-                matching_genes = []
-                for genome_obj, genes in sog_dict.items():
-                    if genome_obj.name == g_name:
-                        matching_genes = [g.id for g in genes]
-                        break
-
+                matching_genes = sog_dict.get(g_name, None)
                 row.append(",".join(matching_genes) if matching_genes else "")
             f.write("\t".join(row) + "\n")

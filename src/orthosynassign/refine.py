@@ -25,7 +25,7 @@ from ._utils import CustomHelpFormatter, RefineArgs, setup_logging, validate_ann
 from .lib import read_og_table, write_og_table
 
 if TYPE_CHECKING:
-    from .lib import Gene, Genome, Orthogroup
+    from .lib import SOG, Genome, Orthogroup
 
 _EPILOG = textwrap.dedent(f"""\
 Examples:
@@ -202,7 +202,7 @@ def _parse_arguments(argv=None) -> RefineArgs:
 
 def _generate_sog_results(
     orthogroups: list[Orthogroup], genome_data: dict[str, Genome], args: RefineArgs, *, cpus: int = 1
-) -> Iterator[tuple[str, dict[Genome, list[Gene]]]]:
+) -> Iterator[SOG]:
     """
     Processes orthogroups and yields results one by one.
 
@@ -213,8 +213,7 @@ def _generate_sog_results(
         cpus (int, optional): Number of CPUs to use for parallel processing. Defaults to 1.
 
     Yields:
-        Iterator[tuple[str, dict[Genome, list[Gene]]]]: An iterator yielding tuples of SOG ID and a dictionary mapping genomes to
-        lists of genes.
+        Iterator[SOG]: An iterator yielding SOGs.
     """
     global_sog_counter = 1
     total_ogs = len(orthogroups)
@@ -248,9 +247,9 @@ def _generate_sog_results(
             pbar = tqdm(pool.imap(worker_func, indices, chunksize=opt_chunksize), **tqdm_kwargs)
 
             for og_id, refined_sogs in pbar:
-                for sog_dict in refined_sogs:
-                    sog_id_str = f"SOG{global_sog_counter:06d}.{og_id}"
-                    yield sog_id_str, sog_dict
+                for sog in refined_sogs:
+                    sog.id = f"SOG{global_sog_counter:06d}.{og_id}"
+                    yield sog
                     global_sog_counter += 1
 
         finally:
@@ -266,7 +265,7 @@ def _init_worker(ogs: list[Orthogroup], genome_map: dict[str, Genome]) -> None:
     _WORKER_GENOME_MAP = genome_map
 
 
-def _process_og_task(og_idx: int, args: RefineArgs) -> tuple[str, list[dict[Genome, list[Gene]]]]:
+def _process_og_task(og_idx: int, args: RefineArgs) -> tuple[str, list[SOG]]:
     """The actual computation worker that processes a single orthogroup.
 
     'og' is passed from the main process, but it references the static genomes now available in _WORKER_GENOME_MAP.
@@ -282,7 +281,7 @@ def _process_og_task(og_idx: int, args: RefineArgs) -> tuple[str, list[dict[Geno
     """
     og = _WORKER_OGS[og_idx]
 
-    results = og.get_refined_sogs(window_size=args.window, ratio_threshold=args.threshold)
+    results = og.refine(window_size=args.window, ratio_threshold=args.threshold)
     return og.id, results
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Iterator, Literal
 
 if TYPE_CHECKING:
-    from .orthogroup import Orthogroup
+    from .orthogroup import SOG, Orthogroup
 
 
 class Gene:
@@ -15,11 +15,12 @@ class Gene:
         len (int): The length of the gene.
         id (str): The name of the gene.
         genome (Genome | None): The genome to which the gene belongs, if any.
-        orthogroup (Orthogroup | None): The orthogroup to which the gene belongs, if any.
+        og (Orthogroup | None): The orthogroup to which the gene belongs, if any.
+        sog (SOG | None): The refined orthogroup to which the gene belongs, if any.
         index (int | None): The index of the gene in its genome.
     """
 
-    __slots__ = ("seqid", "start", "len", "id", "genome", "orthogroup", "index")
+    __slots__ = ("seqid", "start", "len", "id", "genome", "og", "sog", "index")
 
     def __init__(self, seqid: str, start: int, end: int, gene_id: str) -> None:
         """Initialize a new Gene object.
@@ -40,7 +41,8 @@ class Gene:
 
         # For pointers
         self.genome: Genome | None = None
-        self.orthogroup: Orthogroup | None = None
+        self.og: Orthogroup | None = None
+        self.sog: SOG | None = None
         self.index: int | None = None
 
     def __repr__(self) -> str:
@@ -51,7 +53,12 @@ class Gene:
         """
         genome_name = self.genome.name if self.genome else "Unknown genome"
 
-        og_id = self.orthogroup.id if self.orthogroup else "Unassigned orthogroup"
+        if self.sog:
+            og_id = self.sog.id
+        elif self.og:
+            og_id = self.og.id
+        else:
+            og_id = "Unassigned orthogroup"
 
         return f"{self.id} @ {genome_name} | {og_id}"
 
@@ -221,7 +228,7 @@ class Genome:
                     downstream.append(neighbor_gene)
 
                 # Check if this gene is an "anchor" (exists in target_ogs)
-                if neighbor_gene.orthogroup and neighbor_gene.orthogroup.id in target_ogs:
+                if neighbor_gene.og and neighbor_gene.og.id in target_ogs:
                     found_count += 1
 
                 offset += 1
@@ -230,4 +237,4 @@ class Genome:
 
         # We combine upstream (reversed) and downstream, excluding the focal gene
         flanks: list[Gene] = upstream[::-1] + downstream
-        return [g for g in flanks if g.orthogroup and g.orthogroup.id in target_ogs]
+        return [g for g in flanks if g.og and g.og.id in target_ogs]

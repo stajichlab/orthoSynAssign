@@ -85,7 +85,7 @@ def main(args: VisualizeArgs) -> int:
         # Read orthogroups
         logger.info("Reading orthogroup data from: %s", og_file)
         refined_orthogroups = {og.id: og for og in read_og_table(sog_file, genomes)}
-        # Overwrite the Gene.orthogroup attribute with original og ids
+        # Overwrite the Gene.og attribute with original og ids
         _ = read_og_table(og_file, genomes)
 
         # Create output directory
@@ -223,8 +223,8 @@ def _prepare_sog_visualization_data(
     og_counter = Counter()
     for win in aligned_windows.values():
         for gene in win:
-            if gene and gene.orthogroup:
-                og_counter[gene.orthogroup.id] += 1
+            if gene and gene.og:
+                og_counter[gene.og.id] += 1
 
     # Build palette
     ColorCycler.reset_cycle()
@@ -265,7 +265,7 @@ def _get_genes_from_window(og: Orthogroup, *, window: int, keep_all_genes=False)
             og_windows[gene] = list(continuous_slice)
         else:
             # Filter: Keep if gene has an OG or is the focal gene itself
-            og_windows[gene] = [g for g in continuous_slice if g.orthogroup is not None or g == gene]
+            og_windows[gene] = [g for g in continuous_slice if g.og is not None or g == gene]
 
     return og_windows
 

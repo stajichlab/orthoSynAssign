@@ -16,7 +16,7 @@ class TestGeneInitiation:
 
         # Assert pointers default to None
         assert gene.genome is None
-        assert gene.orthogroup is None
+        assert gene.og is None
         assert gene.index is None
 
     def test_gene_reverse_strand_length(self, gene_factory):
@@ -37,7 +37,7 @@ class TestGeneInitiation:
         """Test the __repr__ output when pointers are fully assigned."""
         gene = gene_factory("A1")
         gene.genome = mock_genome_factory("Sample_A")
-        gene.orthogroup = mock_og_factory("OG001")
+        gene.og = mock_og_factory("OG001")
 
         expected_repr = "A1 @ Sample_A | OG001"
         assert repr(gene) == expected_repr
@@ -71,7 +71,7 @@ class TestGeneSerialization:
 
         # Pointers should still be None since we didn't mock them for pickling here
         assert restored_gene.genome is None
-        assert restored_gene.orthogroup is None
+        assert restored_gene.og is None
 
     def test_gene_pickling_with_pointers(self, gene_factory, mock_genome_factory, mock_og_factory):
         """Test that genome and orthogroup pointers are preserved during pickling."""
@@ -79,7 +79,7 @@ class TestGeneSerialization:
 
         # Assign the mock objects to the pointers
         original_gene.genome = mock_genome_factory("Sample_A")
-        original_gene.orthogroup = mock_og_factory("OG001")
+        original_gene.og = mock_og_factory("OG001")
 
         # Serialize the gene (this will recursively pickle the attached mock objects too)
         pickled_data = pickle.dumps(original_gene)
@@ -89,11 +89,11 @@ class TestGeneSerialization:
 
         # 1. Verify the pointers are no longer None
         assert restored_gene.genome is not None
-        assert restored_gene.orthogroup is not None
+        assert restored_gene.og is not None
 
         # 2. Verify the data inside the pointed objects survived
         assert restored_gene.genome.name == "Sample_A"
-        assert restored_gene.orthogroup.id == "OG001"
+        assert restored_gene.og.id == "OG001"
 
         # 3. Verify the __repr__ method can successfully read the restored pointers
         assert repr(restored_gene) == "A1 @ Sample_A | OG001"
@@ -118,7 +118,7 @@ def populated_genome(gene_factory, empty_genome, mock_og_factory):
     for i in range(10):
         gene = gene_factory(f"gene_{i}", "chr1", start=i * 100, end=i * 100 + 50)
         if i % 2 == 0:
-            gene.orthogroup = mock_og_factory(f"OG_{i}")
+            gene.og = mock_og_factory(f"OG_{i}")
         empty_genome.add_gene(gene)
     return empty_genome
 
@@ -202,10 +202,10 @@ class TestGenomeGetWindow:
     def test_get_window_scaffold_break(self, gene_factory, empty_genome, mock_og_factory):
         """Test that windows stop when crossing a scaffold boundary."""
         g1 = gene_factory("G1", "scaf_1", 100, 200)
-        g1.orthogroup = mock_og_factory("OG1")
+        g1.og = mock_og_factory("OG1")
 
         g2 = gene_factory("G2", "scaf_2", 100, 200)  # Different scaffold
-        g2.orthogroup = mock_og_factory("OG2")
+        g2.og = mock_og_factory("OG2")
 
         empty_genome.add_gene(g1)
         empty_genome.add_gene(g2)
@@ -219,7 +219,7 @@ class TestGenomeGetWindow:
         # Create 5 genes: G0, G1, G2, G3, G4
         for i in range(5):
             gene = gene_factory(f"G{i}", "chr1", i * 100, i * 100 + 50)
-            gene.orthogroup = mock_og_factory(f"OG{i}")
+            gene.og = mock_og_factory(f"OG{i}")
             circular_genome.add_gene(gene)
 
         focal = circular_genome[0]  # G0

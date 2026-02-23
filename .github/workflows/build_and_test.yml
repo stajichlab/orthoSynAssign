@@ -1,0 +1,81 @@
+name: CI/build and test
+
+on:
+  push:
+    branches: ["main", "dev"]
+    paths: ["**.py", "pyproject.toml"]
+  pull_request:
+    branches: ["main", "dev"]
+    paths: ["**.py", "pyproject.toml"]
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    env:
+      OS: Linux
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-tags: true
+
+      - name: Cache Python packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ matrix.python }}-${{ hashFiles('pyproject.toml') }}
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Lint with Ruff
+        uses: astral-sh/ruff-action@v3
+        with:
+          version: "latest"
+
+      - name: Install package and dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ".[dev]"
+
+      - name: Cache muscle
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.local/bin/muscle
+          key: ${{ runner.os }}-muscle
+
+      - name: Cache ASTER
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.local/bin/astral
+          key: ${{ runner.os }}-ASTER
+
+      - name: Test with pytest
+        run: |
+          package_name=$(grep '^name = ' pyproject.toml | sed 's/name = "\(.*\)"/\1/' | tr -d '[:space:]')
+          pytest -vv --cov=$package_name --cov-config=.coveragerc --cov-report=xml --runslow
+
+      - name: Upload coverage.xml artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-report-${{ matrix.python }}
+          path: coverage.xml
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5.5.2
+        with:
+          flags: ${{ matrix.python }}
+          env_vars: OS
+          files: ./coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true

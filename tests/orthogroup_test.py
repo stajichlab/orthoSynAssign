@@ -2,7 +2,7 @@ import pickle
 
 import pytest
 
-from orthosynassign.lib import compare_gene_sets, get_shared_ogs
+from orthosynassign.lib import align_sog_dict, calculate_synteny_ratio, compare_gene_sets, get_shared_ogs
 
 
 @pytest.fixture
@@ -277,3 +277,113 @@ class TestGetSharedOGs:
         genome_b = genome_factory("Empty_B")
 
         assert get_shared_ogs(genome_a, genome_b) == set()
+
+
+class TestAlignSogDict:
+    def test_basic_alignment(self, gene_factory):
+        """
+        Test that two neighborhoods with different focal gene offsets
+        are shifted to match a common pivot.
+        """
+        g1, g2, g3 = gene_factory("G1"), gene_factory("G2"), gene_factory("G3")
+        focal_a, focal_b = gene_factory("focal_a"), gene_factory("focal_B")
+
+        # Scenario:
+        # Dict 1: [G1, G2, focal_A] -> focal is at index 2
+        # Dict 2: [focal_B, G3]     -> focal is at index 0
+        sog_dict = {focal_a: [g1, g2, focal_a], focal_b: [focal_b, g3]}
+
+        aligned = align_sog_dict(sog_dict)
+
+        # The pivot should be 2 (the max index of a focal gene)
+        # List 1: [G1, G2, focal_A] (no change to front, needs 0 backpad)
+        # List 2: [None, None, focal_B, G3] (needs 2 frontpads to move focal_B to index 2)
+
+        assert aligned[focal_a] == [g1, g2, focal_a, None]
+        assert aligned[focal_b] == [None, None, focal_b, g3]
+        assert len(aligned[focal_a]) == len(aligned[focal_b])
+
+    def test_empty_dict(self):
+        """Ensure it handles an empty input dictionary without crashing."""
+        assert align_sog_dict({}) == {}
+
+    def test_focal_gene_not_in_list(self, gene_factory):
+        """
+        Test fallback logic: if a focal gene isn't in its list,
+        it treats its index as 0.
+        """
+        g_focal = gene_factory("Focal")
+        g_other = gene_factory("Other")
+
+        # Focal gene is NOT in the neighborhood list
+        sog_dict = {g_focal: [g_other]}
+
+        aligned = align_sog_dict(sog_dict)
+
+        assert aligned[g_focal] == [g_other]
+
+    def test_pure_backpadding(self, gene_factory):
+        """
+        Tests that lists are padded at the end (back_pad) to
+        ensure equal total length.
+        """
+        focal_a, focal_b = gene_factory("focal_a"), gene_factory("focal_b")
+        g1, g2, g3 = gene_factory("G1"), gene_factory("G2"), gene_factory("G3")
+
+        # focal_a is at index 0, length 2: [focal_a, G1]
+        # focal_b is at index 0, length 4: [focal_b, G1, G2, G3]
+        sog_dict = {focal_a: [focal_a, g1], focal_b: [focal_b, g1, g2, g3]}
+
+        aligned = align_sog_dict(sog_dict)
+
+        # Both should have total length 4
+        assert aligned[focal_a] == [focal_a, g1, None, None]
+        assert aligned[focal_b] == [focal_b, g1, g2, g3]
+
+    def test_max_offset_at_start(self, gene_factory):
+        """Tests alignment when one list is heavily biased to the right."""
+        g_far_right = gene_factory("Right")
+        g_far_left = gene_factory("Left")
+        n = gene_factory("N")
+
+        sog_dict = {
+            g_far_right: [n, n, n, g_far_right],  # Index 3
+            g_far_left: [g_far_left],  # Index 0
+        }
+
+        aligned = align_sog_dict(sog_dict)
+
+        # Left gene list should get 3 Nones in front
+        assert aligned[g_far_left] == [None, None, None, g_far_left]
+
+
+class TestCalculateSyntenyRatio:
+    @pytest.mark.parametrize(
+        "win_a, win_b, expected_ratio, description",
+        [
+            # 1. Perfect Identity
+            (["OG1", "OG2"], ["OG1", "OG2"], 1.0, "Identical windows"),
+            # 2. Partial Overlap
+            (["OG1", "OG2", "OG3"], ["OG1", "OG2", "OG4"], 2 / 3, "Partial overlap (2/3)"),
+            # 3. Tandem Duplication handling (The 'Counter' intersection)
+            (["OG1", "OG1"], ["OG1"], 0.5, "A has extra paralog; match should only be 1"),
+            (["OG1", "OG1"], ["OG1", "OG1"], 1.0, "Both have two copies; match should be 2"),
+            # 4. Order Independence
+            (["OG1", "OG2"], ["OG2", "OG1"], 1.0, "Different order, same content"),
+            # 5. Length Penalization (Max length denominator)
+            (["OG1"], ["OG1", "OG2", "OG3", "OG4"], 0.25, "B is much longer; ratio drops"),
+            # 6. No Overlap
+            (["OG1", "OG2"], ["OG3", "OG4"], 0.0, "Zero shared orthogroups"),
+            # 7. Empty Inputs
+            ([], ["OG1"], 0.0, "Window A is empty"),
+            (["OG1"], [], 0.0, "Window B is empty"),
+            ([], [], 0.0, "Both windows are empty"),
+        ],
+    )
+    def test_calculate_synteny_ratio(self, win_a, win_b, expected_ratio, description):
+        """
+        Tests the synteny ratio calculation across multiple genomic scenarios.
+        Using pytest.approx for floating point comparisons.
+        """
+        result = calculate_synteny_ratio(win_a, win_b)
+        assert result == pytest.approx(expected_ratio), f"Failed: {description}"

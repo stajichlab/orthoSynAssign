@@ -56,8 +56,30 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-addopts = "-ra -vv"
+addopts = "-ra -vv --cov=orthosynassign --cov-report=xml"
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src/orthosynassign"]
+omit = [
+  "**/__init__.py",
+  "**/_[^_]*.py",
+  "tests/*.py",
+  "exception.py",
+]
+
+[tool.coverage.report]
+omit = [
+  "**/__init__.py",
+  "**/_[^_]*.py",
+  "tests/*.py",
+  "exception.py",
+]
+exclude_lines = [
+  "pragma: no cover",
+  "def _\\w+\\(",
+  "async def _\\w+\\(",
+]
 
 [tool.versioningit.vcs]
 method = "git"

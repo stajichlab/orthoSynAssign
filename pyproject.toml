@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "versioningit"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "orthoSynAssign"
+name = "orthosynassign"
 authors = [
   { name = "Jason Stajich", email = "jasonstajich.phd@gmail.com" },
   { name = "Cheng-Hung Tsai", email = "chenghung.tsai@email.ucr.edu" },
@@ -60,7 +60,7 @@ addopts = "-ra -vv --cov=orthosynassign --cov-report=xml"
 testpaths = ["tests"]
 
 [tool.coverage.run]
-source = ["src/orthosynassign"]
+source = ["orthosynassign"]
 omit = [
   "**/__init__.py",
   "**/_[^_]*.py",

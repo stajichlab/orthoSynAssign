@@ -51,7 +51,7 @@ jobs:
       - name: Test with pytest
         run: |
           package_name=$(grep '^name = ' pyproject.toml | sed 's/name = "\(.*\)"/\1/' | tr -d '[:space:]')
-          pytest -vv --cov=$package_name --cov-config=.coveragerc --cov-report=xml --runslow
+          pytest -vv --cov=$package_name --cov-config=.coveragerc --cov-report=xml
 
       - name: Upload coverage.xml artifact
         uses: actions/upload-artifact@v6

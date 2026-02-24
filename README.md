@@ -2,10 +2,11 @@
 [![Python](https://img.shields.io/badge/python-3.9_%7C_3.10_%7C_3.11_%7C_3.12_%7C_3.13-blue?logo=python)](https://github.com/stajichlab/Phyling/actions/workflows/build_and_test.yml)
 [![codecov](https://codecov.io/gh/stajichlab/orthoSynAssign/graph/badge.svg?token=mNxGMxekfv)](https://codecov.io/gh/stajichlab/orthoSynAssign)
 [![License](https://img.shields.io/github/license/stajichlab/orthoSynAssign?label=license)](https://github.com/stajichlab/orthoSynAssign/blob/main/LICENSE)
+[![DOI](https://zenodo.org/badge/1140709253.svg)](https://doi.org/10.5281/zenodo.18762979)
 
 # orthoSynAssign
 
-Ortholog Synteny Assignment Tool - A Python tool for analyzing orthologous groups and synteny using OrthoFinder results and genome
+Ortholog Synteny Assignment Tool - A Python tool to refine orthologous groups using synteny information inferred from genome
 annotation files (BED converted from GFF3/GTF). This is a Python re-implementation of the [OrthoRefine], which is written in C++
 but having some issues with sample matching and memory usage. This tool is designed to be more efficient, easier to use, and more
 flexible for custom analyses. We also provide a companion visualization tool, `orthosynassign-vis`, for users to verify the

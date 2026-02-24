@@ -7,7 +7,14 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-02-24
+
 ### Added
+
 - Translate OrthoRefine logic in Python.
 - Multiprocessing support for refinement steps.
 - Companion script to visualize the refined orthologs.
+
+[Unreleased]: https://github.com/stajichlab/orthoSynAssign/compare/v1.0.0...HEAD
+
+[1.0.0]: https://github.com/stajichlab/orthoSynAssign/releases/tag/v1.0.0

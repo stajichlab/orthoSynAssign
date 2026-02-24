@@ -157,6 +157,8 @@ pre-commit install
 
 If you use orthoSynAssign in your research, please cite:
 
+[Cheng-Hung Tsai, & Jason Stajich. (2026). orthoSynAssign - a Python tool to refine orthogroups using synteny information [Computer software]](https://doi.org/10.5281/zenodo.18762979)
+
 [Ludwig, J., Mrázek, J. OrthoRefine: automated enhancement of prior ortholog identification via synteny. BMC Bioinformatics 25, 163 (2024)](https://doi.org/10.1186/s12859-024-05786-7)
 
 ## Contributing

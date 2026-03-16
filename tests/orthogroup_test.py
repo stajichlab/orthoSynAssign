@@ -258,6 +258,8 @@ class TestCompareGeneSets:
             (("Sample_A", "Sample_B"), (["A2"], ["B2", "B2b"]), (["A2"], ["B2"])),
             # Case 4: Multiple candidates (Entire duplication)
             (("Sample_A", "Sample_B"), (["A23", "A23b"], ["B23", "B23b"]), (["A23", "A23b"], ["B23", "B23b"])),
+            # Case 5: Genome Swap Trigger (len(A) > len(B))
+            (("Sample_A", "Sample_B"), (["A2", "A2b"], ["B2"]), (["A2"], ["B2"])),
         ],
         indirect=["prepared_comparison"],
     )
@@ -267,9 +269,11 @@ class TestCompareGeneSets:
 
         # window_size and ratio_threshold match your example file parameters
         refined_results = compare_gene_sets(genes_a, genes_b, window_size=4, ratio_threshold=0.5)
+        set_results = {frozenset(pair) for pair in refined_results}
+        set_expected = {frozenset(pair) for pair in expected}
 
         # We compare the list of tuples directly
-        assert refined_results == expected
+        assert set_results == set_expected
 
 
 class TestGetSharedOGs:

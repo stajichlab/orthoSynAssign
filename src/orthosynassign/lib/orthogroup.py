@@ -182,7 +182,7 @@ def compare_gene_sets(
 
     # Pre-calculate all windows for the secondary set
     secondary_windows = {
-        gene: [g.og.id for g in genome_b.get_window(gene, shared_ogs, window_size) if g.og] for gene in secondary
+        gene: [g.og.id for g in gene.genome.get_window(gene, shared_ogs, window_size) if g.og] for gene in secondary
     }
 
     refined_pairs = []

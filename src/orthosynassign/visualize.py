@@ -298,7 +298,7 @@ def _render_sog_figure(aligned_windows: dict[Gene, list[Gene]], palette: dict[st
             text_weight = "normal"
 
             if gene:
-                og_label = getattr(getattr(gene, "orthogroup", None), "id", "None")
+                og_label = getattr(getattr(gene, "og", None), "id", "None")
                 fc = palette.get(og_label, "#777777")
 
                 if gene == focal_gene:

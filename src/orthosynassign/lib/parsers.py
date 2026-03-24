@@ -154,7 +154,16 @@ class BedParser(AnnotationParser):
         if len(fields) != 4:
             raise ValueError(f"Line {line_num}: Expected 4 fields, got {len(fields)}")
         (seqid, start, end, name) = fields
-        self._genome.add_gene(Gene(seqid=seqid, start=int(start), end=int(end), gene_id=name))
+        start, end = int(start), int(end)
+        gene = Gene(seqid=seqid, start=start, end=end, gene_id=name)
+        self._genome.add_gene(gene)
+
+        names = name.split(";")
+        if len(names) > 1:
+            for n in names:
+                g = Gene(seqid=seqid, start=start, end=end, gene_id=n)
+                g.representative = gene
+                self._genome.add_gene(g, is_isoform=True)
 
 
 def read_og_table(file: str | Path, genomes: dict[str, Genome]) -> list[Orthogroup]:

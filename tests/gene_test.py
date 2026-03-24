@@ -13,11 +13,18 @@ class TestGeneInitiation:
         assert gene.start == 100
         assert gene.len == 100
         assert gene.id == "A1"
+        assert gene.representative == gene
 
         # Assert pointers default to None
         assert gene.genome is None
         assert gene.og is None
         assert gene.index is None
+
+    def test_gene_assign_representative(self, gene_factory):
+        gene = gene_factory("A1")
+        isoform = gene_factory("A1_isoform_1")
+        isoform.representative = gene
+        assert isoform.representative == gene
 
     def test_gene_reverse_strand_length(self, gene_factory):
         """Test that gene length is strictly positive even if start > end."""
@@ -146,6 +153,22 @@ class TestGenomeDataManagement:
 
         assert empty_genome[2].id == "G3"
 
+    def test_add_gene_with_isoform(self, gene_factory, empty_genome):
+        """Test adding genes with is_isoform tags."""
+        genes = [gene_factory(f"G{i + 1}", start=100 + (i * 200), end=200 + (i * 200)) for i in range(3)]
+
+        for i, gene in enumerate(genes):
+            empty_genome.add_gene(gene)
+        genome_length = len(empty_genome)
+
+        for i in range(3):
+            isoform = gene_factory(f"G2_isoform_{i + 1}", start=300, end=400)
+            isoform.representative = genes[1]
+            empty_genome.add_gene(isoform, is_isoform=True)
+            assert isoform.index is None
+            assert len(empty_genome) == genome_length
+            assert isoform.representative.index == 1
+
     def test_getitem_retrieval_types(self, populated_genome):
         """Test retrieving genes via index, string ID, and slices."""
         # 1. Retrieve by index (int)
@@ -234,6 +257,23 @@ class TestGenomeGetWindow:
         assert "G4" in ids
         assert "G1" in ids
         assert len(window) == 2
+
+    def test_get_window_isoforms(self, populated_genome, gene_factory):
+        """Test get_window using isoform."""
+        focal = populated_genome[0]  # gene_0
+        isoforms = [f"isoform_{i + 1}" for i in range(3)]
+        target_ogs = {f"OG_{i}" for i in range(10)}
+        for isoform in isoforms:
+            g = gene_factory(isoform)
+            g.representative = focal
+            populated_genome.add_gene(g, is_isoform=True)
+
+            # Request window of 4
+            window = populated_genome.get_window(g, target_ogs, window_size=4)
+
+            # Should find OG_2 and OG_4 (the next two anchored genes)
+            assert len(window) == 2
+            assert [g.id for g in window] == ["gene_2", "gene_4"]
 
 
 class TestGenomeSerialization:

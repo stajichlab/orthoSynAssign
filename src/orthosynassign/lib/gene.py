@@ -20,7 +20,7 @@ class Gene:
         index (int | None): The index of the gene in its genome.
     """
 
-    __slots__ = ("seqid", "start", "len", "id", "genome", "og", "sog", "index")
+    __slots__ = ("seqid", "start", "len", "id", "genome", "og", "sog", "index", "representative")
 
     def __init__(self, seqid: str, start: int, end: int, gene_id: str) -> None:
         """Initialize a new Gene object.
@@ -44,6 +44,7 @@ class Gene:
         self.og: Orthogroup | None = None
         self.sog: SOG | None = None
         self.index: int | None = None
+        self.representative: Gene = self
 
     def __repr__(self) -> str:
         """Return a string representation of the Gene object.
@@ -174,7 +175,7 @@ class Genome:
         for gene in self._genes:
             gene.genome = self
 
-    def add_gene(self, gene_obj: Gene) -> None:
+    def add_gene(self, gene_obj: Gene, *, is_isoform: bool = False) -> None:
         """Adds a gene object to the genome.
 
         This method updates the genome attribute of the gene object and adds it to both internal lists.
@@ -183,8 +184,9 @@ class Genome:
             gene_obj (Gene): The Gene object to add.
         """
         gene_obj.genome = self
-        gene_obj.index = len(self._genes)
-        self._genes.append(gene_obj)
+        if not is_isoform:
+            gene_obj.index = len(self._genes)
+            self._genes.append(gene_obj)
         self._gene_map[gene_obj.id] = gene_obj
 
     def get_window(self, focal_gene: Gene, target_ogs: set[str], window_size: int) -> list[Gene]:
@@ -200,6 +202,7 @@ class Genome:
         Returns:
             list[Gene]: A list of ordered Gene objects found in the target_ogs set within the window.
         """
+        actual_focal = focal_gene.representative
         half_win: int = window_size // 2
         upstream: list[Gene] = []
         downstream: list[Gene] = []
@@ -208,7 +211,7 @@ class Genome:
         for direction in [-1, 1]:
             found_count, offset = 0, 1
             while found_count < half_win:
-                curr_idx = focal_gene.index + (offset * direction)
+                curr_idx = actual_focal.index + (offset * direction)
 
                 # Boundary checks for linear chromosomes
                 if self.chromosome_type == "l" and (curr_idx < 0 or curr_idx >= total_genes):
@@ -218,7 +221,7 @@ class Genome:
                 neighbor_gene = self._genes[curr_idx % total_genes]
 
                 # Stop if we hit a different scaffold/chromosome
-                if neighbor_gene.seqid != focal_gene.seqid:
+                if neighbor_gene.seqid != actual_focal.seqid:
                     break
 
                 # Collect the gene

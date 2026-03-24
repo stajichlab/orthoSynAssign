@@ -7,6 +7,11 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added the `representative` attribute to the `Gene` class and the `is_isoform` keyword argument to the `add_gene` method of the
+  `Genome` class, allowing for the management of gene isoforms.
+
 ### Fixed
 
 - Resolved an issue identified in [#2](https://github.com/stajichlab/orthoSynAssign/issues/2), specifically a bug within the `compare_gene_sets` function in the `orthogroup` module.
@@ -20,5 +25,4 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Companion script to visualize the refined orthologs.
 
 [Unreleased]: https://github.com/stajichlab/orthoSynAssign/compare/v1.0.0...HEAD
-
 [1.0.0]: https://github.com/stajichlab/orthoSynAssign/releases/tag/v1.0.0

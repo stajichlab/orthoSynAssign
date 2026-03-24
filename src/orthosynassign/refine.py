@@ -16,9 +16,6 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator, cast
 
-from tqdm import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
-
 from . import AUTHOR, VERSION
 from . import __doc__ as _module_doc
 from ._utils import CustomHelpFormatter, RefineArgs, setup_logging, validate_annotations, validate_orthogroup
@@ -215,46 +212,40 @@ def _generate_sog_results(
     Yields:
         Iterator[SOG]: An iterator yielding SOGs.
     """
-    global_sog_counter = 1
     total_ogs = len(orthogroups)
     indices = list(range(total_ogs))
-    desc = f"Refining with {cpus} cpu{'s' if cpus > 1 else ''}"
 
-    tqdm_kwargs = {"desc": desc, "unit": "og", "total": total_ogs, "mininterval": 1, "ascii": " #"}
+    def process_results(results_iterable):
+        global_sog_counter = 1
+        step_size = min(max(1000, total_ogs // 100 * 10), 10000)
 
-    with logging_redirect_tqdm():
-        if cpus == 1:
-            _init_worker(orthogroups, genome_data)
+        for i, (og_id, refined_sogs) in enumerate(results_iterable, 1):
+            if i % step_size == 0 or i == total_ogs:
+                logging.info("Progress: %d / %d orthogroups processed...", i, total_ogs)
 
-            for index in tqdm(indices, **tqdm_kwargs):
-                _, refined_sogs = _process_og_task(index, args)
+            for sog in refined_sogs:
+                sog.id = f"SOG{global_sog_counter:06d}.{og_id}"
+                yield sog
+                global_sog_counter += 1
 
-                for sog_dict in refined_sogs:
-                    sog_id = f"SOG{global_sog_counter:06d}.{orthogroups[index].id}"
-                    yield sog_id, sog_dict
-                    global_sog_counter += 1
-            return
+    worker_func = partial(_process_og_task, args=args)
 
-        # Parallel logic
-        ctx = multiprocessing.get_context("spawn")
-        opt_chunksize = _calculate_optimal_chunksize(total_ogs, cpus)
-        pool = ctx.Pool(processes=cpus, initializer=_init_worker, initargs=(orthogroups, genome_data))
+    logging.info(f"Refining with {cpus} cpu{'s' if cpus > 1 else ''}")
+    if cpus == 1:
+        _init_worker(orthogroups, genome_data)
+        results = map(worker_func, indices)
+        yield from process_results(results)
+        return
 
-        try:
-            worker_func = partial(_process_og_task, args=args)
-
-            # imap returns an iterator, tqdm wraps it
-            pbar = tqdm(pool.imap(worker_func, indices, chunksize=opt_chunksize), **tqdm_kwargs)
-
-            for og_id, refined_sogs in pbar:
-                for sog in refined_sogs:
-                    sog.id = f"SOG{global_sog_counter:06d}.{og_id}"
-                    yield sog
-                    global_sog_counter += 1
-
-        finally:
-            pool.close()
-            pool.join()
+    # Parallel logic
+    opt_chunksize = _calculate_optimal_chunksize(total_ogs, cpus)
+    pool = multiprocessing.Pool(processes=cpus, initializer=_init_worker, initargs=(orthogroups, genome_data))
+    try:
+        results = pool.imap(worker_func, indices, chunksize=opt_chunksize)
+        yield from process_results(results)
+    finally:
+        pool.close()
+        pool.join()
 
 
 def _init_worker(ogs: list[Orthogroup], genome_map: dict[str, Genome]) -> None:

@@ -16,6 +16,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Resolved an issue identified in [#2](https://github.com/stajichlab/orthoSynAssign/issues/2), specifically a bug within the `compare_gene_sets` function in the `orthogroup` module.
 
+- Fixed the visualization script that was previously unable to correctly label and color orthogroups.
+
 ## [1.0.0] - 2026-02-24
 
 ### Added

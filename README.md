@@ -103,17 +103,17 @@ Options:
 ```
 
 The `example` directory contains another refined orthogroup file - `Refined_SOGs.tsv`, say if we want to verify one of the refined
-orthogroup `SOG000032.OG0000040`:
+orthogroup `SOG000039.OG0000040`:
 
 ```bash
-orthosynassign-vis --og_file orthogroups.tsv --sog_file Refined_SOGs.tsv --bed *.bed --sog SOG000032.OG0000040 -f svg
+orthosynassign-vis --og_file orthogroups.tsv --sog_file Refined_SOGs.tsv --bed *.bed --sog SOG000039.OG0000040 -f svg
 ```
 
-The figure will output to `visualize_Refined_SOGs/SOG000032.OG0000040.svg`. In this figure, the genes of the observed refined
+The figure will output to `visualize_Refined_SOGs/SOG000039.OG0000040.svg`. In this figure, the genes of the observed refined
 orthogroup are labelled in yellow; genes assigned to the same orthogroup within this given window are labelled in other chromatic
 colors; genes with orthologs in other genomes located outside the given window are labelled in gray.
 
-<img src= "misc/SOG000032.OG0000040.svg" alt="A refined orthogroup SOG000032" width="800">
+<img src= "misc/SOG000039.OG0000040.svg" alt="A refined orthogroup SOG000039" width="800">
 
 ## Requirements
 

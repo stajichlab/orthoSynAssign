@@ -265,7 +265,7 @@ def _get_genes_from_window(og: Orthogroup, *, window: int, keep_all_genes=False)
             og_windows[gene] = list(continuous_slice)
         else:
             # Filter: Keep if gene has an OG or is the focal gene itself
-            og_windows[gene] = [g for g in continuous_slice if g.og is not None or g == gene]
+            og_windows[gene] = [g for g in continuous_slice if g.og is not None or g == gene.representative]
 
     return og_windows
 
@@ -301,7 +301,7 @@ def _render_sog_figure(aligned_windows: dict[Gene, list[Gene]], palette: dict[st
                 og_label = getattr(getattr(gene, "og", None), "id", "None")
                 fc = palette.get(og_label, "#777777")
 
-                if gene == focal_gene:
+                if gene == focal_gene.representative:
                     text_weight = "bold"
                     fc = "#fcfc42"  # Highlight focal gene
 

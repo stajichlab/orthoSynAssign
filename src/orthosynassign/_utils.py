@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Protocol
 from .lib import BedParser
 
 if TYPE_CHECKING:
-    from .lib._parsers import AnnotationParser
+    from .lib.parsers import AnnotationParser
 
 logger = logging.getLogger(__name__)
 

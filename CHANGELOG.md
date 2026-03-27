@@ -12,6 +12,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Added the `representative` attribute to the `Gene` class and the `is_isoform` keyword argument to the `add_gene` method of the
   `Genome` class, allowing for the management of gene isoforms.
 
+- Added the `synteny` module with `SyntenyEngine` class to accelerate the analysis with array computing.
+
 ### Fixed
 
 - Resolved an issue identified in [#2](https://github.com/stajichlab/orthoSynAssign/issues/2), specifically a bug within the `compare_gene_sets` function in the `orthogroup` module.

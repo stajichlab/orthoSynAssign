@@ -19,10 +19,10 @@ from typing import TYPE_CHECKING, Iterator, cast
 from . import AUTHOR, VERSION
 from . import __doc__ as _module_doc
 from ._utils import CustomHelpFormatter, RefineArgs, setup_logging, validate_annotations, validate_orthogroup
-from .lib import read_og_table, write_og_table
+from .lib import SyntenyEngine, read_og_table, write_og_table
 
 if TYPE_CHECKING:
-    from .lib import SOG, Genome, Orthogroup
+    from .lib import Gene, Genome, Orthogroup
 
 _EPILOG = textwrap.dedent(f"""\
 Examples:
@@ -45,8 +45,8 @@ orthosynassign --og_file orthogroup.tsv --bed *.bed -v
 Written by {AUTHOR}
 """)
 
-_WORKER_OGS: list[Orthogroup] = []
-_WORKER_GENOME_MAP: dict[str, Genome] = {}
+_ENGINE: SyntenyEngine = None
+_GENOMES: list[Genome] = None
 _AVAIL_CPUS = int(os.environ.get("SLURM_CPUS_ON_NODE", os.cpu_count()))
 
 
@@ -86,10 +86,10 @@ def main(args: RefineArgs) -> int:
         logger.info("Creating output directory: %s", output_dir)
 
         # Read gff
-        genomes = {}
+        genomes = []
         for annotation in annotations:
             genome = annotation.parse()
-            genomes[genome.name] = genome
+            genomes.append(genome)
 
         # Read orthogroup
         logger.info("Reading orthogroup data from: %s", og_file)
@@ -99,7 +99,7 @@ def main(args: RefineArgs) -> int:
         logger.info("Refining orthogroups by pairwise synteny analysis.")
         results_stream = _generate_sog_results(orthogroups, genomes, args, cpus=args.threads)
 
-        write_og_table(results_stream, list(genomes.keys()), tmp_output)
+        write_og_table(results_stream, [genome.name for genome in genomes], tmp_output)
         tmp_output.replace(output_path)
         logger.info("Refinement complete. Results saved to %s", args.output)
 
@@ -198,8 +198,8 @@ def _parse_arguments(argv=None) -> RefineArgs:
 
 
 def _generate_sog_results(
-    orthogroups: list[Orthogroup], genome_data: dict[str, Genome], args: RefineArgs, *, cpus: int = 1
-) -> Iterator[SOG]:
+    orthogroups: list[Orthogroup], genomes: list[Genome], args: RefineArgs, *, cpus: int = 1
+) -> Iterator[tuple[str, list[Gene]]]:
     """
     Processes orthogroups and yields results one by one.
 
@@ -215,31 +215,39 @@ def _generate_sog_results(
     total_ogs = len(orthogroups)
     indices = list(range(total_ogs))
 
-    def process_results(results_iterable):
+    def process_results(results_iterable: Iterator[tuple[int, list[list[tuple[int, str]]]]]):
         global_sog_counter = 1
         step_size = min(max(1000, total_ogs // 100 * 10), 10000)
 
-        for i, (og_id, refined_sogs) in enumerate(results_iterable, 1):
+        for i, (og_idx, list_of_clusters) in enumerate(results_iterable, 1):
             if i % step_size == 0 or i == total_ogs:
                 logging.info("Progress: %d / %d orthogroups processed...", i, total_ogs)
 
-            for sog in refined_sogs:
-                sog.id = f"SOG{global_sog_counter:06d}.{og_id}"
-                yield sog
+            original_og_id = orthogroups[og_idx].id
+
+            for cluster in list_of_clusters:
+                # RE-INFLATION: Map (genome_idx, gene_id) back to Gene objects
+                # Using the list 'genomes' passed from the main process
+                genes = [genomes[genome_idx][gene_id] for genome_idx, gene_id in cluster]
+
+                # Create the final SOG object
+                sog_id = f"SOG{global_sog_counter:06d}.{original_og_id}"
+
+                yield (sog_id, genes)
                 global_sog_counter += 1
 
     worker_func = partial(_process_og_task, args=args)
 
     logging.info(f"Refining with {cpus} cpu{'s' if cpus > 1 else ''}")
     if cpus == 1:
-        _init_worker(orthogroups, genome_data)
+        _init_worker(genomes, orthogroups)
         results = map(worker_func, indices)
         yield from process_results(results)
         return
 
     # Parallel logic
     opt_chunksize = _calculate_optimal_chunksize(total_ogs, cpus)
-    pool = multiprocessing.Pool(processes=cpus, initializer=_init_worker, initargs=(orthogroups, genome_data))
+    pool = multiprocessing.Pool(processes=cpus, initializer=_init_worker, initargs=(genomes, orthogroups))
     try:
         results = pool.imap(worker_func, indices, chunksize=opt_chunksize)
         yield from process_results(results)
@@ -248,15 +256,18 @@ def _generate_sog_results(
         pool.join()
 
 
-def _init_worker(ogs: list[Orthogroup], genome_map: dict[str, Genome]) -> None:
+def _init_worker(genomes: list[Genome], orthogroups: list[Orthogroup]) -> None:
     """Initializes each worker by setting up the global variables that will be used for processing orthogroups. This runs once per
     CPU core."""
-    global _WORKER_OGS, _WORKER_GENOME_MAP
-    _WORKER_OGS = ogs
-    _WORKER_GENOME_MAP = genome_map
+    global _ENGINE, _GENOMES
+    _GENOMES = genomes
+    # The engine is built once per worker. Note: In a production environment,
+    # it is often better to build the engine in the main process and pass
+    # it if it uses shared memory, but for 111 samples, initializing here is safe.
+    _ENGINE = SyntenyEngine(genomes, orthogroups)
 
 
-def _process_og_task(og_idx: int, args: RefineArgs) -> tuple[str, list[SOG]]:
+def _process_og_task(og_idx: int, args: RefineArgs) -> tuple[int, list[list[tuple[int, str]]]]:
     """The actual computation worker that processes a single orthogroup.
 
     'og' is passed from the main process, but it references the static genomes now available in _WORKER_GENOME_MAP.
@@ -266,14 +277,11 @@ def _process_og_task(og_idx: int, args: RefineArgs) -> tuple[str, list[SOG]]:
         args (RefineArgs): Command-line arguments for processing.
 
     Returns:
-        tuple[str, list[dict[Genome, list[Gene]]]]: A tuple containing
-            the orthogroup ID and a list of dictionaries mapping genomes
-            to lists of refined genes.
+        tuple[int, list[list[tuple[int, str]]]]: A tuple containing the orthogroup idx and a list of tuple of genome idx and gene
+            name.
     """
-    og = _WORKER_OGS[og_idx]
-
-    results = og.refine(window_size=args.window, ratio_threshold=args.threshold)
-    return og.id, results
+    refined_clusters = _ENGINE.refine(og_idx=og_idx, window_size=args.window, ratio_threshold=args.threshold)
+    return og_idx, refined_clusters
 
 
 def _calculate_optimal_chunksize(iterable_size: int, pool_size: int) -> int:

@@ -166,7 +166,7 @@ class BedParser(AnnotationParser):
                 self._genome.add_gene(g, is_isoform=True)
 
 
-def read_og_table(file: str | Path, genomes: dict[str, Genome]) -> list[Orthogroup]:
+def read_og_table(file: str | Path, genomes: list[Genome]) -> list[Orthogroup]:
     """Read an OrthoFinder-style orthogroups.tsv file.
 
     The file format is tab-separated with:
@@ -183,6 +183,7 @@ def read_og_table(file: str | Path, genomes: dict[str, Genome]) -> list[Orthogro
     file: Path = Path(file)
     orthogroups: list[Orthogroup] = []
     logger.info(f"Reading Orthogroup file: {file}")
+    genomes_dict = {genome.name: genome for genome in genomes}
 
     with open(file, "r", encoding="utf-8") as f:
         # Read header to get species names
@@ -193,8 +194,8 @@ def read_og_table(file: str | Path, genomes: dict[str, Genome]) -> list[Orthogro
         # First column is "Orthogroup", rest are sample names
         samples = header[1:]
         logger.info("Found %s samples: %s", len(samples), ", ".join(samples))
-        if genomes:
-            missing = set(samples) - set(genomes.keys())
+        if genomes_dict:
+            missing = set(samples) - set(genomes_dict.keys())
             if missing:
                 raise ValueError(f"Samples in OG file not found in loaded genomes: {', '.join(missing)}")
 
@@ -212,7 +213,7 @@ def read_og_table(file: str | Path, genomes: dict[str, Genome]) -> list[Orthogro
 
             # Parse genes for each sample
             for i, sample in enumerate(samples, 1):
-                genome = genomes[sample]
+                genome = genomes_dict[sample]
                 gene_data = fields[i].strip()
                 if not gene_data:
                     continue
@@ -254,10 +255,10 @@ def write_og_table(results_gen: Iterator[SOG], all_genomes: list[str], filename:
         f.write("\t".join(header) + "\n")
 
         # Write Rows
-        for sog in results_gen:
-            row = [sog.id]
+        for sog_id, genes in results_gen:
+            row = [sog_id]
             sog_dict = defaultdict(list)
-            for g in sog:
+            for g in genes:
                 sog_dict[g.genome.name].append(g)
             for g_name in all_genomes:
                 matching_genes = sog_dict.get(g_name, None)

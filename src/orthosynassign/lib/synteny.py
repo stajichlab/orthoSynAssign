@@ -76,11 +76,9 @@ class SyntenyEngine:
 
         # Perform pairwise comparisons using internal integer logic
         refined_pairs = self._perform_pairwise_comparisons(anchors, window_size, ratio_threshold)
-
-        # Cluster into SOGs (Connected Components)
         clusters = cluster_refined_ogs(refined_pairs, anchors)
 
-        # EXPAND: Turn clusters of anchors into SOGs of all Isoform IDs
+        # EXPAND: Turn clusters of anchors into isoform IDs
         results: list[list[tuple[int, str]]] = []
         for nodes in clusters:
             if len(nodes) <= 1:
@@ -204,8 +202,18 @@ def get_window(og_array: np.ndarray, seq_array: np.ndarray, gene_idx: int, targe
 
 
 def calculate_synteny_ratio(win_a: np.ndarray, win_b: np.ndarray) -> float:
-    """
-    Computes the syntenic similarity between two gene neighborhoods.
+    """Calculates the 1-to-1 synteny match ratio between two dynamic windows.
+
+    Specifically, this function computes the ratio of overlapping orthogroups present in both window sets. The overlap is
+    determined by finding the minimum count for each shared Orthogroup ID across the two windows.
+
+    Args:
+        win_a (np.ndarray): An array of Orthogroup indices representing the first dynamic window.
+        win_b (np.ndarray): An array of Orthogroup indices representing the second dynamic window.
+
+    Returns:
+        float: The synteny ratio, calculated as the number of overlapping orthogroups divided by the length of the longer window.
+        If either window is empty, the function returns 0.0.
     """
     # Quick exit for empty windows (e.g., end of scaffold)
     len_a = win_a.size
@@ -226,14 +234,10 @@ def calculate_synteny_ratio(win_a: np.ndarray, win_b: np.ndarray) -> float:
     # Calculate matches (min count of shared IDs)
     # Iterate over the smaller unique set to minimize lookups
     matches = 0
-    if len(dict_a) < len(dict_b):
-        for og_id, count in dict_a.items():
-            if og_id in dict_b:
-                matches += min(count, dict_b[og_id])
-    else:
-        for og_id, count in dict_b.items():
-            if og_id in dict_a:
-                matches += min(count, dict_a[og_id])
+    small, large = (dict_a, dict_b) if len(dict_a) < len(dict_b) else (dict_b, dict_a)
+    for og_id, count in small.items():
+        if og_id in large:
+            matches += min(count, large[og_id])
 
     # Normalize by the longer window length
     return matches / max(len_a, len_b)
@@ -241,9 +245,9 @@ def calculate_synteny_ratio(win_a: np.ndarray, win_b: np.ndarray) -> float:
 
 def cluster_refined_ogs(
     pairs: list[tuple[tuple[int, int], tuple[int, int]]], all_genes: list[tuple[int, int]] = None
-) -> list[tuple[int, int]]:
+) -> list[list[tuple[int, int]]]:
     """
-    Consolidates syntenic coordinate pairs into SOGs using DSU.
+    Consolidates syntenic coordinate pairs into clusters using DSU.
 
     Args:
         pairs: List of ((g1, i1), (g2, i2)) representing syntenic links.
@@ -285,5 +289,4 @@ def cluster_refined_ogs(
     # We sort the list of lists based on the first element of each sub-list
     sorted_clusters = sorted(clusters.values(), key=lambda x: x[0])
 
-    # Wrap clusters into SOG objects
     return sorted_clusters

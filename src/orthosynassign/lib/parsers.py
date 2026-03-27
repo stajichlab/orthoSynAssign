@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from .gene import Gene, Genome
-from .orthogroup import SOG, Orthogroup
+from .orthogroup import Orthogroup
 
 logger = logging.getLogger(__name__)
 
@@ -233,7 +233,7 @@ def read_og_table(file: str | Path, genomes: list[Genome]) -> list[Orthogroup]:
     return orthogroups
 
 
-def write_og_table(results_gen: Iterator[SOG], all_genomes: list[str], filename: str | Path) -> None:
+def write_og_table(results_gen: Iterator[tuple[str, list[Gene]]], all_genomes: list[str], filename: str | Path) -> None:
     """Write to an OrthoFinder-style orthogroups.tsv file.
 
     This function takes an iterator of orthogroup results and saves them to a tab-separated values (TSV)

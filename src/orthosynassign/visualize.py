@@ -77,10 +77,10 @@ def main(args: VisualizeArgs) -> int:
         sog_file = validate_orthogroup(args.sog_file)
 
         # Read gff
-        genomes = {}
+        genomes = []
         for annotation in annotations:
             genome = annotation.parse()
-            genomes[genome.name] = genome
+            genomes.append(genome)
 
         # Read orthogroups
         logger.info("Reading orthogroup data from: %s", og_file)

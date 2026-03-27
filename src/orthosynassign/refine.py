@@ -210,7 +210,7 @@ def _generate_sog_results(
         cpus (int, optional): Number of CPUs to use for parallel processing. Defaults to 1.
 
     Yields:
-        Iterator[SOG]: An iterator yielding SOGs.
+        Iterator[tuple[str, list[Gene]]]: An iterator yielding list of genes from a refined OG.
     """
     total_ogs = len(orthogroups)
     indices = list(range(total_ogs))
@@ -226,7 +226,7 @@ def _generate_sog_results(
             original_og_id = orthogroups[og_idx].id
 
             for cluster in list_of_clusters:
-                # RE-INFLATION: Map (genome_idx, gene_id) back to Gene objects
+                # Map (genome_idx, gene_id) back to Gene objects
                 # Using the list 'genomes' passed from the main process
                 genes = [genomes[genome_idx][gene_id] for genome_idx, gene_id in cluster]
 

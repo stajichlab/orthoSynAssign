@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Iterator, Literal
+from typing import TYPE_CHECKING, Any, Iterator, Literal, overload
 
 if TYPE_CHECKING:
     from .orthogroup import SOG, Orthogroup
@@ -128,6 +128,10 @@ class Genome:
         """
         return len(self._genes)
 
+    @overload
+    def __getitem__(self, key: int | str) -> Gene: ...
+    @overload
+    def __getitem__(self, key: slice) -> list[Gene]: ...
     def __getitem__(self, key: int | str | slice) -> Gene | list[Gene]:
         """Returns the gene at the given index or by ID.
 

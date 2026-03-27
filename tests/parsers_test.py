@@ -2,7 +2,7 @@ import gzip
 
 import pytest
 
-from orthosynassign.lib import SOG, BedParser, read_og_table, write_og_table
+from orthosynassign.lib import BedParser, read_og_table, write_og_table
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ class TestReadOGTable:
         ga.add_gene(gene_factory("geneA2", "chr1", 30, 40))
         gb.add_gene(gene_factory("geneB1", "chr1", 10, 20))
 
-        return {"Sample_A": ga, "Sample_B": gb}
+        return [ga, gb]
 
     def test_standard_parsing(self, tmp_path, mock_genomes):
         """Verify parsing of a standard TSV with multiple genes per cell."""
@@ -162,7 +162,7 @@ class TestWriteOGTable:
         gb.add_gene(g1b)
         g1c = gene_factory("G1C")
         gc.add_gene(g1c)
-        sog1 = SOG(sog_id="SOG001", genes=[g1a, g1b, g1c])
+        sog1 = ("SOG001", [g1a, g1b, g1c])
 
         # SOG 2: Paralog in A, missing in C
         g2a1 = gene_factory("G2A1")
@@ -171,7 +171,7 @@ class TestWriteOGTable:
         ga.add_gene(g2a2)
         g2b = gene_factory("G2B")
         gb.add_gene(g2b)
-        sog2 = SOG(sog_id="SOG002", genes=[g2a1, g2a2, g2b])
+        sog2 = ("SOG002", [g2a1, g2a2, g2b])
 
         # 2. Run the function
         output_file = tmp_path / "Refined_SOGs.tsv"

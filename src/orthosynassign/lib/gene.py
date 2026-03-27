@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Iterator, Literal, overload
 
 if TYPE_CHECKING:
-    from .orthogroup import SOG, Orthogroup
+    from .orthogroup import Orthogroup
 
 
 class Gene:
@@ -16,11 +16,10 @@ class Gene:
         id (str): The name of the gene.
         genome (Genome | None): The genome to which the gene belongs, if any.
         og (Orthogroup | None): The orthogroup to which the gene belongs, if any.
-        sog (SOG | None): The refined orthogroup to which the gene belongs, if any.
         index (int | None): The index of the gene in its genome.
     """
 
-    __slots__ = ("seqid", "start", "len", "id", "genome", "og", "sog", "index", "representative")
+    __slots__ = ("seqid", "start", "len", "id", "genome", "og", "index", "representative")
 
     def __init__(self, seqid: str, start: int, end: int, gene_id: str) -> None:
         """Initialize a new Gene object.
@@ -42,7 +41,6 @@ class Gene:
         # For pointers
         self.genome: Genome | None = None
         self.og: Orthogroup | None = None
-        self.sog: SOG | None = None
         self.index: int | None = None
         self.representative: Gene = self
 
@@ -54,9 +52,7 @@ class Gene:
         """
         genome_name = self.genome.name if self.genome else "Unknown genome"
 
-        if self.sog:
-            og_id = self.sog.id
-        elif self.og:
+        if self.og:
             og_id = self.og.id
         else:
             og_id = "Unassigned orthogroup"

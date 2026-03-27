@@ -2,7 +2,7 @@ import pickle
 
 import pytest
 
-from orthosynassign.lib import SOG, align_sog_dict, calculate_synteny_ratio, compare_gene_sets, get_shared_ogs
+from orthosynassign.lib import align_sog_dict, get_shared_ogs
 
 
 @pytest.fixture
@@ -55,72 +55,6 @@ class TestOrthogroupBasics:
         assert list(og) == genes
 
 
-class TestOrthogroupRefinement:
-    def test_refine_integration(self, gene_factory, genome_factory, og_factory, og) -> None:
-        """
-        Tests the full flow of refine using real functions.
-        This ensures Orthogroup, compare_gene_sets, and consolidate_into_sogs
-        all talk to each other correctly.
-        """
-        # 1. Setup: Create two genomes with one perfectly syntenic pair
-        genome_a = genome_factory("Genome_A")
-        genome_b = genome_factory("Genome_B")
-
-        # We need at least one neighbor to satisfy window_size=2
-        # Anchor genes (the focal ones)
-        g_a_focal = gene_factory("A_focal", "chr1", 1000, 2000)
-        g_b_focal = gene_factory("B_focal", "chr1", 1000, 2000)
-
-        # Syntenic neighbors (to ensure the ratio is 1.0)
-        g_a_neighbor = gene_factory("A_neighbor", "chr1", 2100, 3100)
-        g_b_neighbor = gene_factory("B_neighbor", "chr1", 2100, 3100)
-
-        # Setup genomic context
-        for g in [g_a_focal, g_a_neighbor]:
-            genome_a.add_gene(g)
-        for g in [g_b_focal, g_b_neighbor]:
-            genome_b.add_gene(g)
-
-        # Assign neighbors to a different OG so they act as anchors
-        neighbor_og = og_factory("OG_NEIGHBOR")
-        neighbor_og.add_gene(g_a_neighbor)
-        neighbor_og.add_gene(g_b_neighbor)
-
-        # Add focal genes to the test OG
-        og.add_gene(g_a_focal)
-        og.add_gene(g_b_focal)
-
-        # 2. Run the actual logic
-        # ratio_threshold=1.0 ensures they MUST match perfectly
-        result = og.refine(window_size=2, ratio_threshold=1.0)
-
-        # 3. Assertions
-        assert len(result) == 1
-        sog = result[0]
-        print(sog)
-        print(sog._genes)
-        assert g_a_focal in sog
-        assert g_b_focal in sog
-
-    def test_refine_no_synteny_found(self, gene_factory, genome_factory, og):
-        """Test that an OG with no syntenic support returns an empty list."""
-        genome_a = genome_factory("Genome_A")
-        genome_b = genome_factory("Genome_B")
-
-        # Genes in different scaffolds/locations with no neighbors
-        g_a = gene_factory("A1", "chr1", 1000, 2000)
-        g_b = gene_factory("B1", "chr2", 5000, 6000)
-
-        genome_a.add_gene(g_a)
-        genome_b.add_gene(g_b)
-        og.add_gene(g_a)
-        og.add_gene(g_b)
-
-        # Since there are no shared neighbors, this should return []
-        result = og.refine(window_size=4, ratio_threshold=0.5)
-        assert result == []
-
-
 class TestOrthogroupSerialization:
     def test_pickle_consistency(self, og, gene_factory, genome_factory):
         """Verify that Orthogroup data and gene associations survive pickling."""
@@ -137,84 +71,6 @@ class TestOrthogroupSerialization:
         assert restored[0].id == "G1"
         # Ensure the back-pointer to the Orthogroup is still the restored object
         assert restored[0].og is restored
-
-
-class TestSOG:
-    def test_sog_initialization(self, gene_factory):
-        """Verify that SOG initializes with genes and sets their sog pointer."""
-        g1 = gene_factory("G1")
-        g2 = gene_factory("G2")
-        genes = [g1, g2]
-
-        sog = SOG(sog_id="OG001.SOG1", genes=genes)
-
-        # Check basic identity
-        assert sog.id == "OG001.SOG1"
-        assert len(sog) == 2
-
-        # Check that the SOG contains the genes
-        assert g1 in sog
-        assert g2 in sog
-
-        # CRITICAL: Verify the gene.sog pointer was set by the add_gene override
-        assert g1.sog == sog
-        assert g2.sog == sog
-
-    def test_sog_add_gene_idempotency(self, gene_factory):
-        """Ensure adding the same gene twice doesn't duplicate it in the SOG."""
-        g1 = gene_factory("G1")
-        sog = SOG(sog_id="SOG1")
-
-        sog.add_gene(g1)
-        sog.add_gene(g1)  # Duplicate add
-
-        assert len(sog) == 1
-        assert sog._genes == [g1]
-
-    def test_sog_refine_raises_error(self, gene_factory):
-        """Verify that calling refine() on a SOG raises NotImplementedError."""
-        sog = SOG(sog_id="SOG1")
-
-        with pytest.raises(NotImplementedError, match="SOG objects are already refined"):
-            sog.refine(window_size=5, ratio_threshold=0.5)
-
-    def test_inheritance_properties(self, gene_factory):
-        """Ensure SOG still behaves like an Orthogroup (iteration, indexing)."""
-        g1, g2 = gene_factory("G1"), gene_factory("G2")
-        sog = SOG(sog_id="SOG1", genes=[g1, g2])
-
-        # Test __getitem__
-        assert sog[0] == g1
-
-        # Test __iter__
-        iterated_genes = list(sog)
-        assert iterated_genes == [g1, g2]
-
-        # Test __repr__
-        assert "SOG1" in repr(sog)
-        assert "2 genes" in repr(sog)
-
-    def test_gene_repr_priority_with_sog(self, gene_factory):
-        """
-        Verify that the Gene.__repr__ we modified correctly prioritizes
-        the SOG ID over the OG ID.
-        """
-        # (Assuming you have a mock/factory for OG as well)
-        from orthosynassign.lib.orthogroup import Orthogroup
-
-        g1 = gene_factory("G1")
-        og = Orthogroup("OG0001")
-        og.add_gene(g1)
-
-        # Before SOG assignment, should show OG ID
-        assert "OG0001" in repr(g1)
-
-        # After SOG assignment, should show SOG ID
-        sog = SOG("SOG1")
-        sog.add_gene(g1)
-
-        assert "SOG1" in repr(g1)
-        assert "OG0001" not in repr(g1)  # SOG should hide OG in repr
 
 
 @pytest.fixture
@@ -242,38 +98,6 @@ def prepared_comparison(request, read_example_files):
             expected.append((genome_a[id_a], genome_b[id_b]))
 
     return (genes_a, genes_b), expected
-
-
-class TestCompareGeneSets:
-    @pytest.mark.parametrize(
-        "prepared_comparison",
-        [
-            # Case 1: Perfect match (A6-B6)
-            # Format: ((Genomes), ([ListA], [ListB]), ([ExpectedA], [ExpectedB]))
-            (("Sample_A", "Sample_B"), (["A6"], ["B6"]), (["A6"], ["B6"])),
-            # Case 2: No match (Noise)
-            (("Sample_A", "Sample_B"), (["A14"], ["B14"]), None),
-            # Case 3: Multiple candidates (Paralog selection)
-            # Testing if A2 picks the correct B candidate from a list
-            (("Sample_A", "Sample_B"), (["A2"], ["B2", "B2b"]), (["A2"], ["B2"])),
-            # Case 4: Multiple candidates (Entire duplication)
-            (("Sample_A", "Sample_B"), (["A23", "A23b"], ["B23", "B23b"]), (["A23", "A23b"], ["B23", "B23b"])),
-            # Case 5: Genome Swap Trigger (len(A) > len(B))
-            (("Sample_A", "Sample_B"), (["A2", "A2b"], ["B2"]), (["A2"], ["B2"])),
-        ],
-        indirect=["prepared_comparison"],
-    )
-    def test_compare_gene_sets_using_example_files(self, prepared_comparison):
-        """Test syntenic identification with list-based inputs."""
-        (genes_a, genes_b), expected = prepared_comparison
-
-        # window_size and ratio_threshold match your example file parameters
-        refined_results = compare_gene_sets(genes_a, genes_b, window_size=4, ratio_threshold=0.5)
-        set_results = {frozenset(pair) for pair in refined_results}
-        set_expected = {frozenset(pair) for pair in expected}
-
-        # We compare the list of tuples directly
-        assert set_results == set_expected
 
 
 class TestGetSharedOGs:
@@ -440,35 +264,3 @@ class TestAlignSogDict:
 
         # Left gene list should get 3 Nones in front
         assert aligned[g_far_left] == [None, None, None, g_far_left]
-
-
-class TestCalculateSyntenyRatio:
-    @pytest.mark.parametrize(
-        "win_a, win_b, expected_ratio, description",
-        [
-            # 1. Perfect Identity
-            (["OG1", "OG2"], ["OG1", "OG2"], 1.0, "Identical windows"),
-            # 2. Partial Overlap
-            (["OG1", "OG2", "OG3"], ["OG1", "OG2", "OG4"], 2 / 3, "Partial overlap (2/3)"),
-            # 3. Tandem Duplication handling (The 'Counter' intersection)
-            (["OG1", "OG1"], ["OG1"], 0.5, "A has extra paralog; match should only be 1"),
-            (["OG1", "OG1"], ["OG1", "OG1"], 1.0, "Both have two copies; match should be 2"),
-            # 4. Order Independence
-            (["OG1", "OG2"], ["OG2", "OG1"], 1.0, "Different order, same content"),
-            # 5. Length Penalization (Max length denominator)
-            (["OG1"], ["OG1", "OG2", "OG3", "OG4"], 0.25, "B is much longer; ratio drops"),
-            # 6. No Overlap
-            (["OG1", "OG2"], ["OG3", "OG4"], 0.0, "Zero shared orthogroups"),
-            # 7. Empty Inputs
-            ([], ["OG1"], 0.0, "Window A is empty"),
-            (["OG1"], [], 0.0, "Window B is empty"),
-            ([], [], 0.0, "Both windows are empty"),
-        ],
-    )
-    def test_calculate_synteny_ratio(self, win_a, win_b, expected_ratio, description):
-        """
-        Tests the synteny ratio calculation across multiple genomic scenarios.
-        Using pytest.approx for floating point comparisons.
-        """
-        result = calculate_synteny_ratio(win_a, win_b)
-        assert result == pytest.approx(expected_ratio), f"Failed: {description}"

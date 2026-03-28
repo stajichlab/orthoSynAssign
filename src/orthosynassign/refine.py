@@ -12,6 +12,7 @@ import os
 import sys
 import textwrap
 import time
+from collections import defaultdict
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator, cast
@@ -223,15 +224,26 @@ def _generate_sog_results(
             if i % step_size == 0 or i == total_ogs:
                 logging.info("Progress: %d / %d orthogroups processed...", i, total_ogs)
 
-            original_og_id = orthogroups[og_idx].id
+            cur_orthogroup = orthogroups[og_idx]
+
+            isoform_mapper = defaultdict(list)
+            for gene in cur_orthogroup:
+                if gene.representative != gene:
+                    isoform_mapper[gene.representative].append(gene)
 
             for cluster in list_of_clusters:
+                genes: list[Gene] = []
                 # Map (genome_idx, gene_id) back to Gene objects
                 # Using the list 'genomes' passed from the main process
-                genes = [genomes[genome_idx][gene_id] for genome_idx, gene_id in cluster]
+                for genome_idx, gene_id in cluster:
+                    gene = genomes[genome_idx][gene_id]
+                    if gene in isoform_mapper:
+                        genes.extend(isoform_mapper[gene])
+                    else:
+                        genes.append(gene)
 
                 # Create the final SOG object
-                sog_id = f"SOG{global_sog_counter:06d}.{original_og_id}"
+                sog_id = f"SOG{global_sog_counter:06d}.{cur_orthogroup.id}"
 
                 yield (sog_id, genes)
                 global_sog_counter += 1

@@ -17,80 +17,61 @@ class SyntenyEngine:
         # String -> Int for internal math; Int -> String for final reporting
         og_str_to_int = {og.id: i for i, og in enumerate(orthogroups)}
 
-        genome_to_idx = {genome.name: i for i, genome in enumerate(genomes)}
-
         # Initialize data containers
         self.og_arrays: list[np.ndarray] = []  # List of int-represented gene arrays (og id, one array per genome)
         self.seq_arrays: list[np.ndarray] = []  # List of int-represented gene arrays (scaffold boundaries, one array per genome)
+        self.og_members: list[list[tuple[int, str]]] = [[] for _ in range(len(orthogroups))]
 
         # Populate data containers
-        for genome in genomes:
+        for genome_idx, genome in enumerate(genomes):
             # Map seqid strings to local integers (e.g., "Chr1" -> 0)
-            seqid_map = {s: i for i, s in enumerate(dict.fromkeys(gene.seqid for gene in genome._genes))}
+            seqid_map: dict[str, int] = {}
+            next_seqid_int = 0
 
-            # [1, 2, 3,...] for OGs in a certain genome
-            self.og_arrays.append(
-                np.array([og_str_to_int.get(g.og.id, -1) if g.og else -1 for g in genome._genes], dtype=np.int32)
-            )
-            # [1, 1, 1,...] for scaffolds in a certain genome
-            self.seq_arrays.append(np.array([seqid_map[g.seqid] for g in genome._genes], dtype=np.int32))
+            og_arr = []
+            seqid_arr = []
 
-        # Parallel Mapping Lists
-        self.og_members: list[list[tuple[int, str]]] = [[] for _ in range(len(orthogroups))]
-        # member_to_backbone[og_idx][gene_id] = (genome_idx, backbone_idx)
-        self.og_rep_maps: list[dict[tuple[int, str], tuple[int, int]]] = [{} for _ in range(len(orthogroups))]
+            for gene_idx, gene in enumerate(genome._genes):
+                seqid = gene.seqid
+                if seqid not in seqid_map:
+                    seqid_map[seqid] = next_seqid_int
+                    next_seqid_int += 1
+                # [1, 1, 1,...] for scaffolds in a certain genome
+                seqid_arr.append(seqid_map[seqid])
 
-        for og_idx, og in enumerate(orthogroups):
-            for gene_obj in og:
-                genome_idx = genome_to_idx[gene_obj.genome.name]
-                # The physical anchor is always the representative's index in _genes
-                rep_gene_idx = gene_obj.representative.index
+                og_int = og_str_to_int.get(gene.og.id, -1) if gene.og else -1
+                # [1, 2, 3,...] for OGs in a certain genome
+                og_arr.append(og_int)
 
-                gene_id = gene_obj.id
-                self.og_members[og_idx].append((genome_idx, gene_id))
-                self.og_rep_maps[og_idx][(genome_idx, gene_id)] = (genome_idx, rep_gene_idx)
+                # Populate the orthogroups for the engine's 'refine' task
+                if og_int != -1:
+                    self.og_members[og_int].append((genome_idx, gene_idx))
+
+            # Convert to array
+            self.og_arrays.append(np.array(og_arr, dtype=np.int32))
+            self.seq_arrays.append(np.array(seqid_arr, dtype=np.int32))
 
         # Pre-calculate the shared OG matrix
         self.shared_matrix = self._build_shared_matrix()
 
     def refine(self, og_idx: int, window_size: int, ratio_threshold: float) -> list[list[tuple[int, str]]]:
         """
-        Coordinates the refinement of a single Orthogroup.
-        Used by multiprocessing workers.
+        Coordinates the refinement of a single Orthogroup using physical anchors.
+
+        Returns:
+            list[list[tuple[int, int]]]: A list of clusters, where each cluster is a
+            list of (genome_idx, gene_idx) physical anchors.
         """
-        # Get the members for this OG
-        member_ids = self.og_members[og_idx]
-        if not member_ids:
+        # Get the genes for this OG
+        genes = self.og_members[og_idx]
+        if not genes:
             return []
 
-        # Get the representative gene for this OG
-        og_rep_map = self.og_rep_maps[og_idx]
-
-        # Group isoforms by their shared backbone anchor
-        # anchor_to_ids[(g_idx, b_idx)] = ["iso1", "iso2"]
-        anchor_to_ids: defaultdict[tuple[int, int], list[tuple[int, str]]] = defaultdict(list)
-        for m_id in member_ids:
-            anchor_to_ids[og_rep_map[m_id]].append(m_id)
-
-        anchors = list(anchor_to_ids.keys())
-
         # Perform pairwise comparisons using internal integer logic
-        refined_pairs = self._perform_pairwise_comparisons(anchors, window_size, ratio_threshold)
-        clusters = cluster_refined_ogs(refined_pairs, anchors)
+        refined_pairs = self._perform_pairwise_comparisons(genes, window_size, ratio_threshold)
+        clusters = cluster_refined_ogs(refined_pairs, genes)
 
-        # EXPAND: Turn clusters of anchors into isoform IDs
-        results: list[list[tuple[int, str]]] = []
-        for nodes in clusters:
-            if len(nodes) <= 1:
-                continue
-
-            iso_ids = []
-            for anchor in nodes:
-                iso_ids.extend(anchor_to_ids[anchor])
-
-            results.append(iso_ids)
-
-        return results
+        return [cluster for cluster in clusters if len(cluster) > 1]
 
     def _build_shared_matrix(self) -> list[list[set[int]]]:
         """Pre-calculates which OGs are shared between every pair of genomes."""

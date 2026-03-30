@@ -2,25 +2,32 @@ from __future__ import annotations
 
 from collections import defaultdict
 from itertools import combinations
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from ._dsu import DSU
-from .gene import Genome
-from .orthogroup import Orthogroup
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
+    from .gene import Genome
+    from .orthogroup import Orthogroup
 
 
 class SyntenyEngine:
-    __slots__ = ("og_arrays", "seq_arrays", "og_members", "og_rep_maps", "shared_matrix")
+    __slots__ = ("og_arrays", "seq_arrays", "orthogroups", "shared_og_matrix")
 
     def __init__(self, genomes: list[Genome], orthogroups: list[Orthogroup]):
         # String -> Int for internal math; Int -> String for final reporting
         og_str_to_int = {og.id: i for i, og in enumerate(orthogroups)}
 
         # Initialize data containers
-        self.og_arrays: list[np.ndarray] = []  # List of int-represented gene arrays (og id, one array per genome)
-        self.seq_arrays: list[np.ndarray] = []  # List of int-represented gene arrays (scaffold boundaries, one array per genome)
-        self.og_members: list[list[tuple[int, str]]] = [[] for _ in range(len(orthogroups))]
+        # List of int-represented arrays for og id, one array per genome)
+        self.og_arrays: list[NDArray[np.int32]] = []
+        # List of int-represented arrays for scaffold boundaries, one array per genome)
+        self.seq_arrays: list[NDArray[np.int16]] = []
+        self.orthogroups: list[list[tuple[int, str]]] = [[] for _ in range(len(orthogroups))]
 
         # Populate data containers
         for genome_idx, genome in enumerate(genomes):
@@ -45,14 +52,14 @@ class SyntenyEngine:
 
                 # Populate the orthogroups for the engine's 'refine' task
                 if og_int != -1:
-                    self.og_members[og_int].append((genome_idx, gene_idx))
+                    self.orthogroups[og_int].append((genome_idx, gene_idx))
 
             # Convert to array
             self.og_arrays.append(np.array(og_arr, dtype=np.int32))
-            self.seq_arrays.append(np.array(seqid_arr, dtype=np.int32))
+            self.seq_arrays.append(np.array(seqid_arr, dtype=np.int16))
 
         # Pre-calculate the shared OG matrix
-        self.shared_matrix = self._build_shared_matrix()
+        self.shared_og_matrix = self._build_shared_og_matrix()
 
     def refine(self, og_idx: int, window_size: int, ratio_threshold: float) -> list[list[tuple[int, str]]]:
         """
@@ -63,7 +70,7 @@ class SyntenyEngine:
             list of (genome_idx, gene_idx) physical anchors.
         """
         # Get the genes for this OG
-        genes = self.og_members[og_idx]
+        genes = self.orthogroups[og_idx]
         if not genes:
             return []
 
@@ -73,14 +80,28 @@ class SyntenyEngine:
 
         return [cluster for cluster in clusters if len(cluster) > 1]
 
-    def _build_shared_matrix(self) -> list[list[set[int]]]:
+    def _build_shared_og_matrix(self) -> list[list[NDArray[np.int32]]]:
         """Pre-calculates which OGs are shared between every pair of genomes."""
         num_genomes = len(self.og_arrays)
         # Convert each genome's array to a set once
         genome_sets = [set(arr[arr != -1]) for arr in self.og_arrays]
 
-        # Build a 2D matrix of intersections
-        return [[genome_sets[i] & genome_sets[j] for j in range(num_genomes)] for i in range(num_genomes)]
+        matrix = [[None] * num_genomes for _ in range(num_genomes)]
+
+        for i in range(num_genomes):
+            for j in range(i, num_genomes):
+                # Calculate intersection using set logic
+                intersection_set = genome_sets[i] & genome_sets[j]
+
+                # CONVERT TO ARRAY: Sort it to speed up np.isin later
+                # np.unique returns a sorted array which np.isin loves
+                intersect_arr = np.array(list(intersection_set), dtype=np.int32)
+                intersect_arr.sort()
+
+                matrix[i][j] = intersect_arr
+                matrix[j][i] = intersect_arr
+
+        return matrix
 
     def _perform_pairwise_comparisons(self, members: list[tuple[int, int]], window_size: int, ratio_threshold: float):
         """Internal logic using the shared_matrix and og_arrays."""
@@ -121,14 +142,15 @@ class SyntenyEngine:
             secondary, s_idx = genes_a, genome_a
 
         # Get the shared OG set for this genome pair (from our pre-calculated matrix)
-        shared_ogs = self.shared_matrix[p_idx][s_idx]
+        shared_ogs = self.shared_og_matrix[p_idx][s_idx]
 
         # Pre-calculate windows for the second set
         secondary_windows = []
         s_og_array = self.og_arrays[s_idx]
         s_seq_array = self.seq_arrays[s_idx]
+        s_og_array_masked = np.isin(s_og_array, shared_ogs)
         for gene_idx in secondary:
-            win_s = get_window(s_og_array, s_seq_array, gene_idx, shared_ogs, window_size)
+            win_s = s_og_array[get_window(s_og_array_masked, s_seq_array, gene_idx, window_size)]
             # This is your "if g.og.id in shared_ogs" logic, but with integers
             secondary_windows.append((gene_idx, win_s))
 
@@ -137,8 +159,9 @@ class SyntenyEngine:
         # Compare
         p_og_array = self.og_arrays[p_idx]
         p_seq_array = self.seq_arrays[p_idx]
+        p_og_array_masked = np.isin(p_og_array, shared_ogs)
         for gene_idx in primary:
-            win_p = get_window(p_og_array, p_seq_array, gene_idx, shared_ogs, window_size)
+            win_p = p_og_array[get_window(p_og_array_masked, p_seq_array, gene_idx, window_size)]
 
             best_candidate = -1
             max_r = -1.0
@@ -158,17 +181,16 @@ class SyntenyEngine:
         return refined_pairs
 
 
-def get_window(og_array: np.ndarray, seq_array: np.ndarray, gene_idx: int, target_ogs: set[int], window_size: int) -> np.ndarray:
+def get_window(og_masked_array: NDArray[np.bool_], seq_array: NDArray[np.int16], gene_idx: int, window_size: int) -> NDArray:
     """
-    Retrieves a window of Orthogroup IDs, restricted by scaffold boundaries.
+    Retrieves a window of indices, restricted by scaffold boundaries.
     """
     half_win = window_size // 2
     focal_seqid = seq_array[gene_idx]
 
-    is_anchor = np.isin(og_array, list(target_ogs))
     is_same_scaffold = seq_array == focal_seqid
 
-    valid_indices = np.where(is_anchor & is_same_scaffold)[0]
+    valid_indices = np.where(og_masked_array & is_same_scaffold)[0]
 
     pos = np.searchsorted(valid_indices, gene_idx)
 
@@ -177,20 +199,18 @@ def get_window(og_array: np.ndarray, seq_array: np.ndarray, gene_idx: int, targe
     start_r = pos + 1 if (pos < len(valid_indices) and valid_indices[pos] == gene_idx) else pos
     right_side = valid_indices[start_r : start_r + half_win]
 
-    neighbor_indices = np.concatenate([left_side, right_side])
-
-    return og_array[neighbor_indices]
+    return np.concatenate([left_side, right_side])
 
 
-def calculate_synteny_ratio(win_a: np.ndarray, win_b: np.ndarray) -> float:
+def calculate_synteny_ratio(win_a: NDArray[np.int32], win_b: NDArray[np.int32]) -> float:
     """Calculates the 1-to-1 synteny match ratio between two dynamic windows.
 
     Specifically, this function computes the ratio of overlapping orthogroups present in both window sets. The overlap is
     determined by finding the minimum count for each shared Orthogroup ID across the two windows.
 
     Args:
-        win_a (np.ndarray): An array of Orthogroup indices representing the first dynamic window.
-        win_b (np.ndarray): An array of Orthogroup indices representing the second dynamic window.
+        win_a (NDArray): An array of Orthogroup indices representing the first dynamic window.
+        win_b (NDArray): An array of Orthogroup indices representing the second dynamic window.
 
     Returns:
         float: The synteny ratio, calculated as the number of overlapping orthogroups divided by the length of the longer window.

@@ -1,10 +1,11 @@
 # orthoSynAssign
-
-*.pyc
 __pycache__/
 *.py[cod]
 *$py.class
 *.ipynb
+
+# Rust artifacts
+/target/
 
 # Distribution / packaging
 .Python
@@ -22,6 +23,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+*.so
 
 # Virtual environments
 venv/

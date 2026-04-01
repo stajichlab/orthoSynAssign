@@ -7,7 +7,8 @@ from __future__ import annotations
 from .gene import Gene, Genome
 from .orthogroup import Orthogroup, align_sog_dict, get_shared_ogs
 from .parsers import BedParser, read_og_table, write_og_table
-from .synteny import SyntenyEngine, calculate_synteny_ratio, cluster_refined_ogs
+from .rs import calculate_synteny_ratio
+from .synteny import prepare_and_init_engine
 
 __all__ = [
     Gene,
@@ -18,7 +19,6 @@ __all__ = [
     BedParser,
     read_og_table,
     write_og_table,
-    SyntenyEngine,
     calculate_synteny_ratio,
-    cluster_refined_ogs,
+    prepare_and_init_engine,
 ]

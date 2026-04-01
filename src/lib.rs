@@ -58,67 +58,7 @@ impl SyntenyEngine {
         window_size: usize,
         ratio_threshold: f64,
     ) -> Vec<Vec<(usize, usize)>> {
-        py.detach(|| {
-            let genes = &self.orthogroups[og_idx];
-            if genes.is_empty() {
-                return Vec::new();
-            }
-
-            // Group and IMMEDIATELY sort
-            let mut genes_by_genome: HashMap<usize, Vec<usize>> = HashMap::new();
-            for &(genome_idx, gene_idx) in genes {
-                genes_by_genome
-                    .entry(genome_idx)
-                    .or_default()
-                    .push(gene_idx);
-            }
-
-            let mut genome_indices: Vec<usize> = genes_by_genome.keys().cloned().collect();
-            genome_indices.sort_unstable();
-
-            // CRITICAL: Sort the internal gene lists
-            for genome_idx in &genome_indices {
-                if let Some(list) = genes_by_genome.get_mut(genome_idx) {
-                    list.sort_unstable();
-                }
-            }
-
-            let mut refined_pairs = Vec::new();
-
-            // Deterministic Pairwise Loop
-            for i in 0..genome_indices.len() {
-                for j in i + 1..genome_indices.len() {
-                    let idx_a = genome_indices[i];
-                    let idx_b = genome_indices[j];
-                    let genes_a = &genes_by_genome[&idx_a];
-                    let genes_b = &genes_by_genome[&idx_b];
-                    let (p_idx, s_idx, p_genes, s_genes) = if genes_a.len() <= genes_b.len() {
-                        (idx_a, idx_b, genes_a, genes_b)
-                    } else {
-                        (idx_b, idx_a, genes_b, genes_a)
-                    };
-
-                    let pairs = self.compare_gene_pairs(
-                        p_idx,
-                        s_idx,
-                        p_genes,
-                        s_genes,
-                        window_size,
-                        ratio_threshold,
-                    );
-                    refined_pairs.extend(pairs);
-                }
-            }
-
-            // Final Sorting of refined_pairs to ensure DSU input is identical
-            refined_pairs.sort_unstable();
-
-            let clusters = self.cluster_genes(refined_pairs, genes);
-            clusters
-                .into_iter()
-                .filter(|cluster| cluster.len() > 1)
-                .collect()
-        })
+        py.detach(|| self.refine_logic(og_idx, window_size, ratio_threshold))
     }
 }
 
@@ -148,6 +88,73 @@ impl SyntenyEngine {
             }
         }
         matrix
+    }
+
+    fn refine_logic(
+        &self,
+        og_idx: usize,
+        window_size: usize,
+        ratio_threshold: f64,
+    ) -> Vec<Vec<(usize, usize)>> {
+        let genes = &self.orthogroups[og_idx];
+        if genes.is_empty() {
+            return Vec::new();
+        }
+
+        // Group and IMMEDIATELY sort
+        let mut genes_by_genome: HashMap<usize, Vec<usize>> = HashMap::new();
+        for &(genome_idx, gene_idx) in genes {
+            genes_by_genome
+                .entry(genome_idx)
+                .or_default()
+                .push(gene_idx);
+        }
+
+        let mut genome_indices: Vec<usize> = genes_by_genome.keys().cloned().collect();
+        genome_indices.sort_unstable();
+
+        // CRITICAL: Sort the internal gene lists
+        for genome_idx in &genome_indices {
+            if let Some(list) = genes_by_genome.get_mut(genome_idx) {
+                list.sort_unstable();
+            }
+        }
+
+        let mut refined_pairs = Vec::new();
+
+        // Deterministic Pairwise Loop
+        for i in 0..genome_indices.len() {
+            for j in i + 1..genome_indices.len() {
+                let idx_a = genome_indices[i];
+                let idx_b = genome_indices[j];
+                let genes_a = &genes_by_genome[&idx_a];
+                let genes_b = &genes_by_genome[&idx_b];
+                let (p_idx, s_idx, p_genes, s_genes) = if genes_a.len() <= genes_b.len() {
+                    (idx_a, idx_b, genes_a, genes_b)
+                } else {
+                    (idx_b, idx_a, genes_b, genes_a)
+                };
+
+                let pairs = self.compare_gene_pairs(
+                    p_idx,
+                    s_idx,
+                    p_genes,
+                    s_genes,
+                    window_size,
+                    ratio_threshold,
+                );
+                refined_pairs.extend(pairs);
+            }
+        }
+
+        // Final Sorting of refined_pairs to ensure DSU input is identical
+        refined_pairs.sort_unstable();
+
+        let clusters = self.cluster_genes(refined_pairs, genes);
+        clusters
+            .into_iter()
+            .filter(|cluster| cluster.len() > 1)
+            .collect()
     }
 
     fn compare_gene_pairs(

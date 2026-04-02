@@ -31,6 +31,7 @@ jobs:
           path: |
             CHANGELOG.md
             CITATION.cff
+            Cargo.toml
           key: version-bump-v${{ github.event.client_payload.version }}-${{ github.event.client_payload.run_id }}
 
       - name: Get release info

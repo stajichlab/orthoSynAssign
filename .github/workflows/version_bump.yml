@@ -62,12 +62,22 @@ jobs:
             echo "CITATION.cff not found, skipping update."
           fi
 
+      - name: Update Package Versions
+        run: |
+          VERSION=${{ steps.query-release-info.outputs.version }}
+
+          # Update Cargo.toml (Matches the first 'version =' it finds)
+          sed -i "0,/^version = .*/s//version = \"$VERSION\"/" Cargo.toml
+          echo "Updated files to version $VERSION"
+
       - name: Save cache to CHANGELOG.md and CITATION.cff
         uses: actions/cache/save@v5
         with:
           path: |
             CHANGELOG.md
             CITATION.cff
+            Cargo.toml
+
           key: version-bump-v${{ steps.query-release-info.outputs.version }}-${{ github.run_id }}
 
       - name: Repository Dispatch

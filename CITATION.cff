@@ -13,7 +13,7 @@ authors:
   - affiliation: University of California-Riverside
     family-names: Jason Stajich
 cff-version: 1.2.0
-date-released: "2026-02-24"
+date-released: '2026-04-02'
 doi: 10.5281/zenodo.18762980
 identifiers:
   - type: swh
@@ -24,4 +24,4 @@ message: If you use this software, please cite it using the metadata from this f
 repository-code: https://github.com/stajichlab/orthoSynAssign/tree/v1.0.0
 title: orthoSynAssign - a Python tool to refine orthogroups using synteny information
 type: software
-version: v1.0.0
+version: 1.1.0

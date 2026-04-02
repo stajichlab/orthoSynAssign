@@ -7,6 +7,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-04-02
+
 ### Added
 
 - Added the `representative` attribute to the `Gene` class and the `is_isoform` keyword argument to the `add_gene` method of the
@@ -45,5 +47,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Multiprocessing support for refinement steps.
 - Companion script to visualize the refined orthologs.
 
-[Unreleased]: https://github.com/stajichlab/orthoSynAssign/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/stajichlab/orthoSynAssign/compare/v1.1.0...HEAD
+
+[1.1.0]: https://github.com/stajichlab/orthoSynAssign/compare/v1.0.0...v1.1.0
+
 [1.0.0]: https://github.com/stajichlab/orthoSynAssign/releases/tag/v1.0.0

@@ -53,16 +53,20 @@ orthosynassign-vis = "orthosynassign.visualize:run_cli"
 "Homepage" = "https://github.com/stajichlab/orthoSynAssign"
 "Bug Tracker" = "https://github.com/stajichlab/orthoSynAssign/issues"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "orthosynassign.lib.rs"
+python-source = "src"
 
 [tool.pytest.ini_options]
 minversion = "8.0"
 addopts = "-ra -vv --cov=orthosynassign --cov-report=xml"
 testpaths = ["tests"]
+pythonpath = ["src"]
 
 [tool.coverage.run]
 source = ["orthosynassign"]
+relative_files = true
 omit = [
   "**/__init__.py",
   "**/_[^_]*.py",
@@ -82,11 +86,6 @@ exclude_lines = [
   "def _\\w+\\(",
   "async def _\\w+\\(",
 ]
-
-[tool.maturin]
-features = ["pyo3/extension-module"]
-module-name = "orthosynassign.lib.rs"
-python-source = "src"
 
 [tool.ruff]
 line-length = 130

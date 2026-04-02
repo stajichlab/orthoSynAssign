@@ -8,13 +8,12 @@
 
 Ortholog Synteny Assignment Tool - A Python tool to refine orthologous groups using synteny information inferred from genome
 annotation files (BED converted from GFF3/GTF). This is a Python re-implementation of the [OrthoRefine], which is written in C++
-but having some issues with sample matching and memory usage. This tool is designed to be more efficient, easier to use, and more
-flexible for custom analyses. We also provide a companion visualization tool, `orthosynassign-vis`, for users to verify the
-results. This refined version includes improved memory management and a streamlined workflow for assigning syntenic regions,
-addressing limitations identified in the original OrthoRefine implementation. Specifically, it incorporates optimized data
-structures for handling genomic ranges and utilizes more efficient algorithms for finding overlaps between ortholog groups and
-genomic segments. The core logic has been carefully reviewed and tested to ensure accuracy and performance, focusing on robustness
-in handling large datasets.
+but had some issues with sample matching and memory usage. This tool is designed to be more efficient, easier to use, and more
+flexible for custom analyses. In addition, to ensure optimal processing speed and memory usage, the core synteny analysis is
+implemented in [Rust]. We also provide a companion visualization tool, `orthosynassign-vis`, for users to verify the results. This
+refined version includes improved memory management and a streamlined workflow for assigning syntenic regions, addressing
+limitations identified in the original OrthoRefine implementation. Specifically, it incorporates optimized data structures for
+handling genomic ranges and utilizes more efficient algorithms for finding overlaps between ortholog groups and genomic segments.
 
 ## Usage
 
@@ -26,18 +25,19 @@ First, install the package following the [instruction](#install) below.
 under phylogenetic hierarchical orthogroups directory and output the refined orthogroups with synteny information determined using
 the genome annotation files.
 
-Most genome annotation files are made in GFF3/GTF format. However, the flexibility on the 9th attribute column makes it
-challenging to correctly parse the required information and match it to entries in the orthogroup file (which usually contains
-protein IDs). To make this easier, we provide a script `misc/convert_bed.sh` that converts GFF3/GTF files into BED format and uses
-gene IDs as names to link with genes in the orthogroup file.
+Most genome annotation files are distributed in GFF3 or GTF formats. However, the high degree of flexibility in the 9th attribute
+column often makes it challenging to parse specific protein IDs and match them to entries in an orthogroup file.
+
+To simplify this process, we provide a utility script, misc/gff2bed.bash, which converts GFF3 files into a standardized BED
+format. This script ensures that genomic coordinates are correctly linked to the protein IDs used by OrthoFinder. If a gene contains multiple isoforms, the script collapses them into a single entry. In this case, the 4th column of the BED file will contain all associated protein IDs, concatenated using a semicolon (;) as a delimiter.
+
+[!IMPORTANT]
+If you choose to prepare your own BED files manually, you must use a semicolon (;) to separate protein IDs for multiple isoforms. orthoSynAssign is specifically programmed to use this delimiter to resolve isoform-related mapping issues automatically.
 
 The `orthogroup.tsv` or `N0.tsv` file from OrthoFinder should be tab-separated with:
 
 - First column: Orthogroup ID (e.g., OG0000001)
 - Subsequent columns: Protein IDs for each species (column headers are species names)
-
-In order to make it work, users need to convert the protein IDs to gene IDs before the analysis. This is typically done by
-removing the transcript suffix (e.g., -T1, -T2).
 
 Please use `orthosynassign --help` to see all available options and arguments:
 
@@ -117,7 +117,8 @@ colors; genes with orthologs in other genomes located outside the given window a
 
 ## Requirements
 
-- Python >= 3.9, < 3.14
+- [Python] >= 3.9, < 3.14
+- [numpy] >= 2.0.0
 - [pyGenomeViz] >= 1.6.0
 
 ## Install
@@ -165,5 +166,8 @@ If you use orthoSynAssign in your research, please cite:
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+[Python]: https://www.python.org/
 [OrthoRefine]: https://github.com/jl02142/OrthoRefine
+[numpy]: https://numpy.org/
 [pyGenomeViz]: https://github.com/moshi4/pyGenomeViz
+[Rust]: https://rust-lang.org/

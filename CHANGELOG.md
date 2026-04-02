@@ -12,13 +12,18 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Added the `representative` attribute to the `Gene` class and the `is_isoform` keyword argument to the `add_gene` method of the
   `Genome` class, allowing for the management of gene isoforms.
 
-- Added the `synteny` module with `SyntenyEngine` class to accelerate the analysis with array computing.
+- Added the `synteny` module to initiate a `SyntenyEngine` object written in Rust to accelerate the analysis and minimize memory
+  overhead.
 
 ### Changed
 
-- `calculate_synteny_ratio` now takes numpy array as input instead of a list of str, improving performance by utilizing array computing.
+- `calculate_synteny_ratio` and `get_window` are now implemented in Rust.
 
-- Use disjoint set union (DSU) instead of BFS search for finding clusters after refinement. (`lib.dsu` module)
+- Use disjoint set union (DSU) instead of BFS search for finding clusters after refinement.
+
+- Use `ThreadPool` instead of `Pool` to minimize memory overhead.
+
+- Sort the final refined clusters to ensure consistent results across runs.
 
 ### Removed
 
@@ -28,10 +33,9 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Resolved an issue identified in [#2](https://github.com/stajichlab/orthoSynAssign/issues/2), specifically a bug within the `compare_gene_sets` function in the `orthogroup` module.
+- Resolved an issue identified in [#2](https://github.com/stajichlab/orthoSynAssign/issues/2), specifically a bug within the `compare_gene_sets` function in the `orthogroup` module. (incorporated into lib.rs)
 
 - Fixed the visualization script that was previously unable to correctly label and color orthogroups.
-
 
 ## [1.0.0] - 2026-02-24
 

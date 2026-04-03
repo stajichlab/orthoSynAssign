@@ -11,13 +11,10 @@ class SyntenyEngine:
     """
     High-performance Rust backend for synteny analysis.
     """
-    def __init__(
-        self, num_genomes: int, num_orthogroups: int, og_inputs: list[NDArray[np.int32]], seq_inputs: list[NDArray[np.int16]]
-    ) -> None:
+    def __init__(self, num_orthogroups: int, og_inputs: list[list[int]], seq_inputs: list[list[int]]) -> None:
         """Initializes a SyntenyEngine with genomic data.
 
         Args:
-            num_genomes (int): The total number of genomes in the analysis.
             num_orthogroups (int): The total number of unique orthogroups.
             og_inputs (list[NDArray[np.int16]]): A list of arrays of orthogroup IDs for genes in each genome.
             seq_inputs (list[NDArray[np.int32]]): A list of arrays of sequence/scaffold IDs for genes in each genome.

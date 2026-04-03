@@ -5,8 +5,8 @@ use std::collections::{HashMap, HashSet};
 #[pyclass]
 #[pyo3(name = "SyntenyEngine")]
 pub struct SyntenyEngine {
-    og_arrays: Vec<Vec<i32>>,
-    seq_arrays: Vec<Vec<i16>>,
+    og_inputs: Vec<Vec<i32>>,
+    seq_inputs: Vec<Vec<i16>>,
     orthogroups: Vec<Vec<(usize, usize)>>,
     shared_og_matrix: Vec<Vec<Vec<i32>>>,
 }
@@ -16,35 +16,28 @@ impl SyntenyEngine {
     #[new]
     #[pyo3(text_signature = "(num_genomes, num_orthogroups, og_inputs, seq_inputs)")]
     pub fn new(
-        num_genomes: usize,
         num_orthogroups: usize,
-        og_inputs: Vec<PyReadonlyArray1<i32>>,
-        seq_inputs: Vec<PyReadonlyArray1<i16>>,
+        og_inputs: Vec<Vec<i32>>,
+        seq_inputs: Vec<Vec<i16>>,
     ) -> PyResult<Self> {
-        let mut og_arrays = Vec::with_capacity(num_genomes);
-        let mut seq_arrays = Vec::with_capacity(num_genomes);
         let mut orthogroups = vec![Vec::new(); num_orthogroups];
 
-        for (genome_idx, (og_arr, seq_arr)) in og_inputs.into_iter().zip(seq_inputs).enumerate() {
-            let og_view = og_arr.as_slice()?;
-            let seq_view = seq_arr.as_slice()?;
-
-            for (gene_idx, &og_int) in og_view.iter().enumerate() {
+        for (genome_idx, (og_vec, _)) in og_inputs.iter().zip(&seq_inputs).enumerate() {
+            for (gene_idx, &og_int) in og_vec.iter().enumerate() {
                 if og_int >= 0 {
-                    if (og_int as usize) < num_orthogroups {
-                        orthogroups[og_int as usize].push((genome_idx, gene_idx));
+                    let og_idx_usize = og_int as usize;
+                    if og_idx_usize < num_orthogroups {
+                        orthogroups[og_idx_usize].push((genome_idx, gene_idx));
                     }
                 }
             }
-            og_arrays.push(og_view.to_vec());
-            seq_arrays.push(seq_view.to_vec());
         }
 
-        let shared_og_matrix = Self::build_shared_matrix(&og_arrays);
+        let shared_og_matrix = Self::build_shared_matrix(&og_inputs);
 
         Ok(SyntenyEngine {
-            og_arrays,
-            seq_arrays,
+            og_inputs,
+            seq_inputs,
             orthogroups,
             shared_og_matrix,
         })
@@ -64,9 +57,9 @@ impl SyntenyEngine {
 
 /// Internal Rust-only Logic
 impl SyntenyEngine {
-    fn build_shared_matrix(og_arrays: &[Vec<i32>]) -> Vec<Vec<Vec<i32>>> {
-        let num_genomes = og_arrays.len();
-        let genome_sets: Vec<HashSet<i32>> = og_arrays
+    fn build_shared_matrix(og_inputs: &[Vec<i32>]) -> Vec<Vec<Vec<i32>>> {
+        let num_genomes = og_inputs.len();
+        let genome_sets: Vec<HashSet<i32>> = og_inputs
             .iter()
             .map(|arr| arr.iter().filter(|&&id| id != -1).cloned().collect())
             .collect();
@@ -173,23 +166,35 @@ impl SyntenyEngine {
 
         let mut secondary_data = Vec::with_capacity(secondary_genes.len());
         for &s_gene_idx in secondary_genes {
-            self.get_window_logic(s_idx, s_gene_idx, window_size, shared_ogs, &mut idx_buffer);
+            get_window_logic(
+                &self.seq_inputs[s_idx],
+                s_gene_idx,
+                window_size,
+                |i| shared_ogs.binary_search(&self.og_inputs[s_idx][i]).is_ok(),
+                &mut idx_buffer,
+            );
             let mut win_ogs: Vec<i32> = idx_buffer
                 .iter()
-                .map(|&i| self.og_arrays[s_idx][i])
+                .map(|&i| self.og_inputs[s_idx][i])
                 .collect();
             win_ogs.sort_unstable();
             secondary_data.push((s_gene_idx, win_ogs));
         }
 
         for &p_gene_idx in primary_genes {
-            self.get_window_logic(p_idx, p_gene_idx, window_size, shared_ogs, &mut idx_buffer);
+            get_window_logic(
+                &self.seq_inputs[p_idx],
+                p_gene_idx,
+                window_size,
+                |i| shared_ogs.binary_search(&self.og_inputs[p_idx][i]).is_ok(),
+                &mut idx_buffer,
+            );
             if idx_buffer.is_empty() {
                 continue;
             }
 
             p_win_buffer.clear();
-            p_win_buffer.extend(idx_buffer.iter().map(|&i| self.og_arrays[p_idx][i]));
+            p_win_buffer.extend(idx_buffer.iter().map(|&i| self.og_inputs[p_idx][i]));
             p_win_buffer.sort_unstable();
 
             let mut best_candidate = None;
@@ -208,43 +213,6 @@ impl SyntenyEngine {
             }
         }
         refined_pairs
-    }
-
-    fn get_window_logic(
-        &self,
-        genome_idx: usize,
-        gene_idx: usize,
-        win_size: usize,
-        shared: &[i32],
-        buf: &mut Vec<usize>,
-    ) {
-        buf.clear();
-        let ogs = &self.og_arrays[genome_idx];
-        let seqs = &self.seq_arrays[genome_idx];
-        let half = win_size / 2;
-        let focal_seq = seqs[gene_idx];
-
-        let mut left_indices = Vec::with_capacity(half);
-        let (mut i, mut l_count) = (gene_idx, 0);
-        while i > 0 && l_count < half {
-            i -= 1;
-            if seqs[i] == focal_seq && shared.binary_search(&ogs[i]).is_ok() {
-                left_indices.push(i);
-                l_count += 1;
-            }
-        }
-        for &idx in left_indices.iter().rev() {
-            buf.push(idx);
-        }
-
-        let (mut j, mut r_count) = (gene_idx, 0);
-        while j < ogs.len() - 1 && r_count < half {
-            j += 1;
-            if seqs[j] == focal_seq && shared.binary_search(&ogs[j]).is_ok() {
-                buf.push(j);
-                r_count += 1;
-            }
-        }
     }
 
     fn cluster_genes(
@@ -315,24 +283,26 @@ impl SyntenyEngine {
     }
 }
 
-fn get_window_logic(
-    og_masked: &[bool],
+fn get_window_logic<F>(
     seq: &[i16],
     gene_idx: usize,
     window_size: usize,
+    og_is_valid: F,
     buffer: &mut Vec<usize>,
-) {
+) where
+    F: Fn(usize) -> bool,
+{
     buffer.clear();
     let half_win = window_size / 2;
     let focal_seqid = seq[gene_idx];
 
     // Look Left: Find up to half_win valid indices before gene_idx
-    let mut left_count = 0;
-    let mut i = gene_idx;
+
     let mut left_indices = Vec::with_capacity(half_win);
+    let (mut i, mut left_count) = (gene_idx, 0);
     while i > 0 && left_count < half_win {
         i -= 1;
-        if og_masked[i] && seq[i] == focal_seqid {
+        if seq[i] == focal_seqid && og_is_valid(i) {
             left_indices.push(i);
             left_count += 1;
         }
@@ -343,11 +313,10 @@ fn get_window_logic(
     }
 
     // Look Right: Find up to half_win valid indices after gene_idx
-    let mut right_count = 0;
-    let mut j = gene_idx;
-    while j < og_masked.len() - 1 && right_count < half_win {
+    let (mut j, mut right_count) = (gene_idx, 0);
+    while j < seq.len() - 1 && right_count < half_win {
         j += 1;
-        if og_masked[j] && seq[j] == focal_seqid {
+        if seq[j] == focal_seqid && og_is_valid(j) {
             buffer.push(j);
             right_count += 1;
         }
@@ -370,7 +339,13 @@ pub fn get_window_py(
     // Call the pure Rust logic
     let mut result_vec = Vec::with_capacity(window_size);
 
-    get_window_logic(og_masked, seq, gene_idx, window_size, &mut result_vec);
+    get_window_logic(
+        seq,
+        gene_idx,
+        window_size,
+        |i| og_masked[i],
+        &mut result_vec,
+    );
 
     Ok(result_vec)
 }

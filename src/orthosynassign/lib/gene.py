@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Iterator, Literal, overload
+from typing import TYPE_CHECKING, Any, Iterator, overload
 
 if TYPE_CHECKING:
     from .orthogroup import Orthogroup
@@ -87,23 +87,20 @@ class Genome:
         _gene_map (dict[str, Gene]): A dictionary that maps gene IDs to their corresponding Gene objects for fast lookup.
     """
 
-    __slots__ = ("name", "chromosome_type", "_genes", "_gene_map")
+    __slots__ = ("name", "is_circular", "_genes", "_gene_map")
 
-    def __init__(self, name: str, *, chromosome_type: Literal["l", "c"] = "l") -> None:
+    def __init__(self, name: str, *, is_circular: bool = False) -> None:
         """Initialize a new Genome object.
 
         Args:
             name (str): The name of the genome.
-            chromosome_type (Literal["l", "c"], optional): The type of chromosome ('c' for circular, 'l' for linear). Defaults to
-            'l'.
+            is_circular (bool, optional): The chromosome is circular or not. Defaults to False.
 
         Raises:
             ValueError: If an invalid chromosome type is provided.
         """
         self.name = name
-        if chromosome_type not in ("l", "c"):
-            raise ValueError("Invalid chromosome type. Must be 'l' or 'c'.")
-        self.chromosome_type = chromosome_type
+        self.is_circular = is_circular
         self._genes: list[Gene] = []
         self._gene_map: dict[str, Gene] = {}
 
@@ -113,7 +110,7 @@ class Genome:
         Returns:
             str: A string containing the genome name and type.
         """
-        chromosome_type = "linear" if self.chromosome_type == "l" else "circular"
+        chromosome_type = "circular" if self.is_circular else "linear"
         return f"[{self.name} ({chromosome_type}) | with {len(self._genes)} genes]"
 
     def __len__(self) -> int:
@@ -214,7 +211,7 @@ class Genome:
                 curr_idx = actual_focal.index + (offset * direction)
 
                 # Boundary checks for linear chromosomes
-                if self.chromosome_type == "l" and (curr_idx < 0 or curr_idx >= total_genes):
+                if not self.is_circular and (curr_idx < 0 or curr_idx >= total_genes):
                     break
 
                 # Handle circularity with modulo

@@ -11,7 +11,9 @@ class SyntenyEngine:
     """
     High-performance Rust backend for synteny analysis.
     """
-    def __init__(self, num_orthogroups: int, og_inputs: list[list[int]], seq_inputs: list[list[int]]) -> None:
+    def __init__(
+        self, num_orthogroups: int, og_list_all: list[list[int]], seqid_list_all: list[list[int]], is_circular_all: list[bool]
+    ) -> None:
         """Initializes a SyntenyEngine with genomic data.
 
         Args:

@@ -19,6 +19,7 @@ def prepare_and_init_engine(genomes: list[Genome], orthogroups: list[Orthogroup]
 
     og_list_all: list[list[int]] = []
     seqid_list_all: list[list[int]] = []
+    is_circular_all: list[bool] = []
 
     for genome in genomes:
         # Local map for scaffold IDs per genome (e.g., 'Chr1' -> 0)
@@ -44,8 +45,9 @@ def prepare_and_init_engine(genomes: list[Genome], orthogroups: list[Orthogroup]
         # We pass lists to the Rust constructor; Rust converts them to Vec internally.
         og_list_all.append(og_list_genome)
         seqid_list_all.append(seqid_list_genome)
+        is_circular_all.append(genome.is_circular)
 
     # Initialize the Rust Engine
-    engine = SyntenyEngine(len(orthogroups), og_list_all, seqid_list_all)
+    engine = SyntenyEngine(len(orthogroups), og_list_all, seqid_list_all, is_circular_all)
 
     return engine

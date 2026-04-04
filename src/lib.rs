@@ -5,24 +5,27 @@ use std::collections::{HashMap, HashSet};
 #[pyclass]
 #[pyo3(name = "SyntenyEngine")]
 pub struct SyntenyEngine {
-    og_inputs: Vec<Vec<i32>>,
-    seq_inputs: Vec<Vec<i16>>,
+    ogs: Vec<Vec<i32>>,
+    seqids: Vec<Vec<i16>>,
+    circular_genome: Vec<bool>,
     orthogroups: Vec<Vec<(usize, usize)>>,
+    #[pyo3(get)]
     shared_og_matrix: Vec<Vec<Vec<i32>>>,
 }
 
 #[pymethods]
 impl SyntenyEngine {
     #[new]
-    #[pyo3(text_signature = "(num_genomes, num_orthogroups, og_inputs, seq_inputs)")]
+    #[pyo3(text_signature = "(num_orthogroups, og_list_all, seqid_list_all, is_circular_all)")]
     pub fn new(
         num_orthogroups: usize,
-        og_inputs: Vec<Vec<i32>>,
-        seq_inputs: Vec<Vec<i16>>,
+        og_list_all: Vec<Vec<i32>>,
+        seqid_list_all: Vec<Vec<i16>>,
+        is_circular_all: Vec<bool>,
     ) -> PyResult<Self> {
         let mut orthogroups = vec![Vec::new(); num_orthogroups];
 
-        for (genome_idx, (og_vec, _)) in og_inputs.iter().zip(&seq_inputs).enumerate() {
+        for (genome_idx, (og_vec, _)) in og_list_all.iter().zip(&seqid_list_all).enumerate() {
             for (gene_idx, &og_int) in og_vec.iter().enumerate() {
                 if og_int >= 0 {
                     let og_idx_usize = og_int as usize;
@@ -33,11 +36,12 @@ impl SyntenyEngine {
             }
         }
 
-        let shared_og_matrix = Self::build_shared_matrix(&og_inputs);
+        let shared_og_matrix = Self::build_shared_matrix(&og_list_all);
 
         Ok(SyntenyEngine {
-            og_inputs,
-            seq_inputs,
+            ogs: og_list_all,
+            seqids: seqid_list_all,
+            circular_genome: is_circular_all,
             orthogroups,
             shared_og_matrix,
         })
@@ -152,41 +156,51 @@ impl SyntenyEngine {
 
     fn compare_gene_pairs(
         &self,
-        p_idx: usize,
-        s_idx: usize,
+        primary_genome_idx: usize,
+        secondary_genome_idx: usize,
         primary_genes: &[usize],
         secondary_genes: &[usize],
         window_size: usize,
         ratio_threshold: f64,
     ) -> Vec<((usize, usize), (usize, usize))> {
-        let shared_ogs = &self.shared_og_matrix[p_idx][s_idx];
+        let shared_ogs = &self.shared_og_matrix[primary_genome_idx][secondary_genome_idx];
         let mut idx_buffer = Vec::with_capacity(window_size);
         let mut p_win_buffer = Vec::with_capacity(window_size);
         let mut refined_pairs = Vec::new();
 
         let mut secondary_data = Vec::with_capacity(secondary_genes.len());
         for &s_gene_idx in secondary_genes {
-            get_window_logic(
-                &self.seq_inputs[s_idx],
+            get_window(
+                &self.seqids[secondary_genome_idx],
                 s_gene_idx,
                 window_size,
-                |i| shared_ogs.binary_search(&self.og_inputs[s_idx][i]).is_ok(),
+                self.circular_genome[secondary_genome_idx],
+                |i| {
+                    shared_ogs
+                        .binary_search(&self.ogs[secondary_genome_idx][i])
+                        .is_ok()
+                },
                 &mut idx_buffer,
             );
             let mut win_ogs: Vec<i32> = idx_buffer
                 .iter()
-                .map(|&i| self.og_inputs[s_idx][i])
+                .map(|&i| self.ogs[secondary_genome_idx][i])
                 .collect();
             win_ogs.sort_unstable();
             secondary_data.push((s_gene_idx, win_ogs));
         }
 
         for &p_gene_idx in primary_genes {
-            get_window_logic(
-                &self.seq_inputs[p_idx],
+            get_window(
+                &self.seqids[primary_genome_idx],
                 p_gene_idx,
                 window_size,
-                |i| shared_ogs.binary_search(&self.og_inputs[p_idx][i]).is_ok(),
+                self.circular_genome[primary_genome_idx],
+                |i| {
+                    shared_ogs
+                        .binary_search(&self.ogs[primary_genome_idx][i])
+                        .is_ok()
+                },
                 &mut idx_buffer,
             );
             if idx_buffer.is_empty() {
@@ -194,7 +208,11 @@ impl SyntenyEngine {
             }
 
             p_win_buffer.clear();
-            p_win_buffer.extend(idx_buffer.iter().map(|&i| self.og_inputs[p_idx][i]));
+            p_win_buffer.extend(
+                idx_buffer
+                    .iter()
+                    .map(|&i| self.ogs[primary_genome_idx][i]),
+            );
             p_win_buffer.sort_unstable();
 
             let mut best_candidate = None;
@@ -209,7 +227,10 @@ impl SyntenyEngine {
                 }
             }
             if let Some(s_best) = best_candidate {
-                refined_pairs.push(((p_idx, p_gene_idx), (s_idx, s_best)));
+                refined_pairs.push((
+                    (primary_genome_idx, p_gene_idx),
+                    (secondary_genome_idx, s_best),
+                ));
             }
         }
         refined_pairs
@@ -283,7 +304,24 @@ impl SyntenyEngine {
     }
 }
 
-fn get_window_logic<F>(
+fn get_window<F>(
+    seq: &[i16],
+    gene_idx: usize,
+    window_size: usize,
+    is_circular: bool,
+    og_is_valid: F,
+    buffer: &mut Vec<usize>,
+) where
+    F: Fn(usize) -> bool,
+{
+    if is_circular {
+        get_window_circular(seq, gene_idx, window_size, og_is_valid, buffer);
+    } else {
+        get_window_linear(seq, gene_idx, window_size, og_is_valid, buffer);
+    }
+}
+
+fn get_window_linear<F>(
     seq: &[i16],
     gene_idx: usize,
     window_size: usize,
@@ -308,14 +346,71 @@ fn get_window_logic<F>(
         }
     }
     // Since we scanned backwards, reverse to keep ascending order
-    for &idx in left_indices.iter().rev() {
-        buffer.push(idx);
-    }
+    buffer.extend(left_indices.into_iter().rev());
 
     // Look Right: Find up to half_win valid indices after gene_idx
     let (mut j, mut right_count) = (gene_idx, 0);
     while j < seq.len() - 1 && right_count < half_win {
         j += 1;
+        if seq[j] == focal_seqid && og_is_valid(j) {
+            buffer.push(j);
+            right_count += 1;
+        }
+    }
+}
+
+fn get_window_circular<F>(
+    seq: &[i16],
+    gene_idx: usize,
+    window_size: usize,
+    og_is_valid: F,
+    buffer: &mut Vec<usize>,
+) where
+    F: Fn(usize) -> bool,
+{
+    buffer.clear();
+    let half_win = window_size / 2;
+    let focal_seqid = seq[gene_idx];
+
+    let n_genes = seq.len();
+    if n_genes == 0 {
+        return;
+    }
+    let max_neighbors = std::cmp::min(window_size, n_genes - 1);
+
+    // Look Left (Counter-clockwise)
+    let mut left_indices = Vec::with_capacity(half_win);
+    let (mut i, mut left_count) = (gene_idx, 0);
+
+    for _ in 0..n_genes {
+        if left_count >= half_win {
+            break;
+        }
+        i = (i + n_genes - 1) % n_genes; // Circular decrement
+        if i == gene_idx {
+            break;
+        }
+
+        if seq[i] == focal_seqid && og_is_valid(i) {
+            left_indices.push(i);
+            left_count += 1;
+        }
+    }
+    buffer.extend(left_indices.into_iter().rev());
+
+    // Look Right (Clockwise)
+    let (mut j, mut right_count) = (gene_idx, 0);
+    let r_limit = std::cmp::min(half_win, max_neighbors - left_count);
+
+    for _ in 0..n_genes {
+        if right_count >= r_limit {
+            break;
+        }
+        j = (j + 1) % n_genes; // Circular increment
+        if j == gene_idx {
+            break;
+        }
+
         if seq[j] == focal_seqid && og_is_valid(j) {
             buffer.push(j);
             right_count += 1;
@@ -330,6 +425,7 @@ pub fn get_window_py(
     og_masked_array: PyReadonlyArray1<bool>,
     seq_array: PyReadonlyArray1<i16>,
     gene_idx: usize,
+    is_circular: bool,
     window_size: usize,
 ) -> PyResult<Vec<usize>> {
     // Convert NumPy to Rust Slices
@@ -339,10 +435,11 @@ pub fn get_window_py(
     // Call the pure Rust logic
     let mut result_vec = Vec::with_capacity(window_size);
 
-    get_window_logic(
+    get_window(
         seq,
         gene_idx,
         window_size,
+        is_circular,
         |i| og_masked[i],
         &mut result_vec,
     );

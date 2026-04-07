@@ -48,8 +48,8 @@ def gene_factory():
 def genome_factory():
     """Creates a real Genome instance."""
 
-    def _make(name: str, chromosome_type="l"):
-        return Genome(name, chromosome_type=chromosome_type)
+    def _make(name: str, is_circular=False):
+        return Genome(name, is_circular=is_circular)
 
     return _make
 

@@ -111,12 +111,12 @@ class TestGeneSerialization:
 
 @pytest.fixture
 def empty_genome(genome_factory):
-    return genome_factory("Sample_A", chromosome_type="l")
+    return genome_factory("Sample_A", is_circular=False)
 
 
 @pytest.fixture
 def circular_genome(genome_factory):
-    return genome_factory("Sample_Circular", chromosome_type="c")
+    return genome_factory("Sample_Circular", is_circular=True)
 
 
 @pytest.fixture
@@ -133,12 +133,8 @@ def populated_genome(gene_factory, empty_genome, mock_og_factory):
 class TestGenomeInitialization:
     def test_init_valid(self, empty_genome):
         assert empty_genome.name == "Sample_A"
-        assert empty_genome.chromosome_type == "l"
+        assert empty_genome.is_circular is False
         assert len(empty_genome) == 0
-
-    def test_init_invalid_type(self, genome_factory):
-        with pytest.raises(ValueError, match="Invalid chromosome type"):
-            genome_factory("Fail", chromosome_type="x")
 
 
 class TestGenomeDataManagement:

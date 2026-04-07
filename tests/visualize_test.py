@@ -119,8 +119,8 @@ def mock_visualize_dependencies(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("orthosynassign.visualize.setup_logging", lambda x: None)
     monkeypatch.setattr("orthosynassign.visualize.validate_annotations", lambda x: [])
     monkeypatch.setattr("orthosynassign.visualize.validate_orthogroup", lambda x: x)
-    monkeypatch.setattr("orthosynassign.visualize.read_og_table", lambda x, y: {})
-    monkeypatch.setattr("orthosynassign.visualize._prepare_sog_visualization_data", lambda a, b, c, cpus: iter([]))
+    monkeypatch.setattr("orthosynassign.visualize.read_og_table", lambda x, y: [])
+    monkeypatch.setattr("orthosynassign.visualize._get_palette", lambda a: {})
     monkeypatch.setattr("orthosynassign.visualize._render_sog_figure", lambda a, b, c: None)
 
     # Mock Path.mkdir and Path.unlink to prevent actual disk changes

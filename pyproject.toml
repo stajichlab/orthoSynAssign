@@ -32,7 +32,6 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "numpy>=2.0.0",
   "pygenomeviz>=1.6.0",
 ]
 dynamic = ["version"]

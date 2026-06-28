@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Convert GFF3 or GTF to BED format, mapping proteins to their genes."""
 
+import argparse
+import gzip
 import re
 import sys
-import gzip
-import argparse
 from collections import defaultdict
 
 
@@ -107,6 +107,16 @@ def parse_args():
         action="store_true",
         help="List available format styles and exit"
     )
+    parser.add_argument(
+        "--use-gene-id",
+        action="store_true",
+        help="Use gene ID as name column instead of transcript ID (funannotate only)"
+    )
+    parser.add_argument(
+        "--collapse-transcripts",
+        action="store_true",
+        help="Collapse all transcripts per gene into one line with semicolon-separated IDs (funannotate only)"
+    )
 
     return parser.parse_args()
 
@@ -151,7 +161,7 @@ def gff_to_gene_proteins(lines, config):
 
     Returns a tuple of:
       gene_coords      gene_id -> (chrom, start, end) with 0-based BED start
-      gene_to_proteins gene_id -> set of protein ids
+      gene_to_proteins gene_id -> list of protein ids (ordered by appearance)
     """
     gene_type = config["gene_type"]
     protein_type = config["protein_type"]
@@ -159,8 +169,9 @@ def gff_to_gene_proteins(lines, config):
 
     gene_coords = {}                      # gene_id -> (chrom, start, end)
     parent_map = {}                       # feature_id -> parent_id
-    protein_features = set()              # (protein_id, parent_id)
-    gene_to_proteins = defaultdict(set)   # gene_id -> set of protein ids
+    protein_features = []                 # [(protein_id, parent_id, order)]
+    gene_to_proteins = defaultdict(list)  # gene_id -> list of protein ids
+    feature_order = 0
 
     # PASS 1: read features, record gene coordinates, parent links, and the
     # features that carry protein identity.
@@ -190,16 +201,22 @@ def gff_to_gene_proteins(lines, config):
         if ftype == protein_type:
             protein_id = get_attr(attributes, protein_id_attr) if protein_id_attr else feature_id
             if protein_id and parent:
-                protein_features.add((protein_id, parent))
+                protein_features.append((protein_id, parent, feature_order))
+                feature_order += 1
 
     # PASS 2: climb the parent chain from each protein feature up to its gene.
-    for protein_id, parent in protein_features:
+    for protein_id, parent, order in protein_features:
         current = parent
         while current and current not in gene_coords:
             current = parent_map.get(current, "")
 
         if current in gene_coords:
-            gene_to_proteins[current].add(protein_id)
+            gene_to_proteins[current].append((protein_id, order))
+
+    # Sort by appearance order and keep only IDs
+    for gene_id in gene_to_proteins:
+        gene_to_proteins[gene_id].sort(key=lambda x: x[1])
+        gene_to_proteins[gene_id] = [pid for pid, _ in gene_to_proteins[gene_id]]
 
     return gene_coords, gene_to_proteins
 
@@ -278,15 +295,36 @@ def main():
     bed_records = []
     for gene_id, proteins in gene_to_proteins.items():
         chrom, start, end = gene_coords[gene_id]
-        protein_list = ";".join(sorted(proteins))
-        bed_records.append((chrom, start, end, gene_id, protein_list))
 
-    # Sort by chromosome and position; end and gene_id break ties so the
-    # output is deterministic regardless of intermediate set ordering.
-    bed_records.sort(key=lambda x: (x[0], x[1], x[2], x[3]))
+        # For funannotate (sequence_ontology), use transcript ID by default
+        if config.get("protein_type") == "mRNA" and (args.style == "sequence_ontology" or (not args.style and dialect == "gff3")):
+            if args.use_gene_id:
+                # Use gene ID as the name
+                name = gene_id
+            elif args.collapse_transcripts:
+                # Use semicolon-separated transcript IDs
+                name = ";".join(proteins)
+            else:
+                # Use only first transcript ID
+                name = proteins[0] if proteins else gene_id
+            bed_records.append((chrom, start, end, name))
+        else:
+            # Legacy behavior for other formats: use gene_id and list all proteins
+            protein_list = ";".join(sorted(proteins))
+            bed_records.append((chrom, start, end, gene_id, protein_list))
 
-    for chrom, start, end, gene_id, proteins in bed_records:
-        print(f"{chrom}\t{start}\t{end}\t{gene_id}\t{proteins}")
+    # Sort by chromosome and position; end and name break ties so the
+    # output is deterministic.
+    if len(bed_records) > 0 and len(bed_records[0]) == 4:
+        # 4-column BED format
+        bed_records.sort(key=lambda x: (x[0], x[1], x[2], x[3]))
+        for chrom, start, end, name in bed_records:
+            print(f"{chrom}\t{start}\t{end}\t{name}")
+    else:
+        # 5-column format (legacy)
+        bed_records.sort(key=lambda x: (x[0], x[1], x[2], x[3]))
+        for chrom, start, end, gene_id, proteins in bed_records:
+            print(f"{chrom}\t{start}\t{end}\t{gene_id}\t{proteins}")
 
 
 if __name__ == "__main__":

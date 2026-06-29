@@ -8,7 +8,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from orthosynassign.lib.parsers import AnnotationParser
 from orthosynassign.visualize import AUTHOR, VERSION, main, run_cli
 
 

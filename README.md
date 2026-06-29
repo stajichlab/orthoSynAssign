@@ -28,8 +28,11 @@ the genome annotation files.
 Most genome annotation files are distributed in GFF3 or GTF formats. However, the high degree of flexibility in the 9th attribute
 column often makes it challenging to parse specific protein IDs and match them to entries in an orthogroup file.
 
-To simplify this process, we provide a utility script, misc/gff2bed.bash, which converts GFF3 files into a standardized BED
-format. This script ensures that genomic coordinates are correctly linked to the protein IDs used by OrthoFinder. If a gene contains multiple isoforms, the script collapses them into a single entry. In this case, the 4th column of the BED file will contain all associated protein IDs, concatenated using a semicolon (;) as a delimiter.
+To simplify this process, we provide a utility python script, `misc/gff2bed.py`, which converts GFF3 files into a standardized BED
+format. This script ensures that genomic coordinates are correctly linked to the protein IDs used by OrthoFinder. To align with
+orthoSynAssign's isoform processing design, please enable the `--collapse-transcripts` flag during the conversion. This action
+collapses genes with multiple isoforms into a single BED entry, and the 4th column of the resulting BED file will contain all
+associated protein IDs, concatenated using a semicolon (;) as a delimiter.
 
 [!IMPORTANT]
 If you choose to prepare your own BED files manually, you must use a semicolon (;) to separate protein IDs for multiple isoforms. orthoSynAssign is specifically programmed to use this delimiter to resolve isoform-related mapping issues automatically.

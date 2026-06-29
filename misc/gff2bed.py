@@ -21,7 +21,7 @@ def get_gtf_attr(attributes_str, key):
     for attr in attributes_str.strip().split(";"):
         attr = attr.strip()
         if attr.startswith(key + " "):
-            return attr[len(key) + 1:].strip().strip('"')
+            return attr[len(key) + 1 :].strip().strip('"')
     return ""
 
 
@@ -82,40 +82,22 @@ DEFAULT_STYLE = {
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Convert GFF3 or GTF to BED format, mapping proteins to their genes."
+    parser = argparse.ArgumentParser(description="Convert GFF3 or GTF to BED format, mapping proteins to their genes.")
+    parser.add_argument("gff_file", nargs="?", help="GFF3 or GTF file (gzipped or plain text)")
+    parser.add_argument(
+        "--style", choices=FORMATS.keys(), default=None, help="Format style (default: auto-selected from the detected dialect)"
     )
     parser.add_argument(
-        "gff_file",
-        nargs="?",
-        help="GFF3 or GTF file (gzipped or plain text)"
+        "--format", choices=["auto", "gff3", "gtf"], default="auto", help="Input dialect (default: auto-detect from file content)"
     )
+    parser.add_argument("--list-styles", action="store_true", help="List available format styles and exit")
     parser.add_argument(
-        "--style",
-        choices=FORMATS.keys(),
-        default=None,
-        help="Format style (default: auto-selected from the detected dialect)"
-    )
-    parser.add_argument(
-        "--format",
-        choices=["auto", "gff3", "gtf"],
-        default="auto",
-        help="Input dialect (default: auto-detect from file content)"
-    )
-    parser.add_argument(
-        "--list-styles",
-        action="store_true",
-        help="List available format styles and exit"
-    )
-    parser.add_argument(
-        "--use-gene-id",
-        action="store_true",
-        help="Use gene ID as name column instead of transcript ID (funannotate only)"
+        "--use-gene-id", action="store_true", help="Use gene ID as name column instead of transcript ID (funannotate only)"
     )
     parser.add_argument(
         "--collapse-transcripts",
         action="store_true",
-        help="Collapse all transcripts per gene into one line with semicolon-separated IDs (funannotate only)"
+        help="Collapse all transcripts per gene into one line with semicolon-separated IDs (funannotate only)",
     )
 
     return parser.parse_args()
@@ -167,9 +149,9 @@ def gff_to_gene_proteins(lines, config):
     protein_type = config["protein_type"]
     protein_id_attr = config["protein_id_attr"]
 
-    gene_coords = {}                      # gene_id -> (chrom, start, end)
-    parent_map = {}                       # feature_id -> parent_id
-    protein_features = []                 # [(protein_id, parent_id, order)]
+    gene_coords = {}  # gene_id -> (chrom, start, end)
+    parent_map = {}  # feature_id -> parent_id
+    protein_features = []  # [(protein_id, parent_id, order)]
     gene_to_proteins = defaultdict(list)  # gene_id -> list of protein ids
     feature_order = 0
 
@@ -216,7 +198,7 @@ def gff_to_gene_proteins(lines, config):
     # Sort by appearance order and keep only IDs
     for gene_id in gene_to_proteins:
         gene_to_proteins[gene_id].sort(key=lambda x: x[1])
-        gene_to_proteins[gene_id] = [pid for pid, _ in gene_to_proteins[gene_id]]
+        gene_to_proteins[gene_id] = list(dict.fromkeys([pid for pid, _ in gene_to_proteins[gene_id]]))
 
     return gene_coords, gene_to_proteins
 
@@ -232,8 +214,8 @@ def gtf_to_gene_proteins(lines, config):
     gene_id_attr = config["gene_id_attr"]
     protein_id_attr = config["protein_id_attr"]
 
-    gene_coords = {}                      # gene_id -> (chrom, start, end)
-    gene_to_proteins = defaultdict(set)   # gene_id -> set of protein ids
+    gene_coords = {}  # gene_id -> (chrom, start, end)
+    gene_to_proteins = defaultdict(set)  # gene_id -> set of protein ids
 
     for line in lines:
         if line.startswith("#"):

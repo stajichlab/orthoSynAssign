@@ -80,13 +80,16 @@ class TestGeneSerialization:
         assert restored_gene.genome is None
         assert restored_gene.og is None
 
-    def test_gene_pickling_with_pointers(self, gene_factory, mock_genome_factory, mock_og_factory):
+    def test_gene_pickling_with_pointers(self, gene_factory, genome_factory, og_factory):
         """Test that genome and orthogroup pointers are preserved during pickling."""
         original_gene = gene_factory("A1")
 
         # Assign the mock objects to the pointers
-        original_gene.genome = mock_genome_factory("Sample_A")
-        original_gene.og = mock_og_factory("OG001")
+        genome = genome_factory("Sample_A")
+        genome.add_gene(original_gene)
+
+        og = og_factory("OG001")
+        og.add_gene(original_gene)
 
         # Serialize the gene (this will recursively pickle the attached mock objects too)
         pickled_data = pickle.dumps(original_gene)
@@ -120,12 +123,13 @@ def circular_genome(genome_factory):
 
 
 @pytest.fixture
-def populated_genome(gene_factory, empty_genome, mock_og_factory):
+def populated_genome(gene_factory, empty_genome, og_factory):
     """Creates a linear genome with 10 genes, alternating OG assignments."""
     for i in range(10):
         gene = gene_factory(f"gene_{i}", "chr1", start=i * 100, end=i * 100 + 50)
         if i % 2 == 0:
-            gene.og = mock_og_factory(f"OG_{i}")
+            og = og_factory(f"OG_{i}")
+            og.add_gene(gene)
         empty_genome.add_gene(gene)
     return empty_genome
 
@@ -203,73 +207,6 @@ class TestGenomeDataManagement:
         for i, gene in enumerate(populated_genome):
             assert gene.id == f"gene_{i}"
             assert gene.index == i
-
-
-# class TestGenomeGetWindow:
-#     def test_get_window_linear_boundaries(self, populated_genome):
-#         """Test that linear genomes stop at the start/end of the gene list."""
-#         focal = populated_genome[0]  # gene_0
-#         target_ogs = {f"OG_{i}" for i in range(10)}
-
-#         # Request window of 4, but at index 0, there is only 'downstream'
-#         window = populated_genome.get_window(focal, target_ogs, window_size=4)
-
-#         # Should find OG_2 and OG_4 (the next two anchored genes)
-#         assert len(window) == 2
-#         assert [g.id for g in window] == ["gene_2", "gene_4"]
-
-#     def test_get_window_scaffold_break(self, gene_factory, empty_genome, mock_og_factory):
-#         """Test that windows stop when crossing a scaffold boundary."""
-#         g1 = gene_factory("G1", "scaf_1", 100, 200)
-#         g1.og = mock_og_factory("OG1")
-
-#         g2 = gene_factory("G2", "scaf_2", 100, 200)  # Different scaffold
-#         g2.og = mock_og_factory("OG2")
-
-#         empty_genome.add_gene(g1)
-#         empty_genome.add_gene(g2)
-
-#         # We look for OG2, but it's on scaf_2, so it should be blocked
-#         window = empty_genome.get_window(g1, {"OG2"}, window_size=2)
-#         assert len(window) == 0
-
-#     def test_get_window_circularity(self, gene_factory, circular_genome, mock_og_factory):
-#         """Test that circular genomes wrap around using modulo."""
-#         # Create 5 genes: G0, G1, G2, G3, G4
-#         for i in range(5):
-#             gene = gene_factory(f"G{i}", "chr1", i * 100, i * 100 + 50)
-#             gene.og = mock_og_factory(f"OG{i}")
-#             circular_genome.add_gene(gene)
-
-#         focal = circular_genome[0]  # G0
-#         target_ogs = {"OG1", "OG4"}  # OG1 is index 1, OG4 is index 4 (upstream wrap)
-
-#         window = circular_genome.get_window(focal, target_ogs, window_size=2)
-
-#         # In a circular genome:
-#         # Downstream 1 step: G1 (OG1 found)
-#         # Upstream 1 step: G4 (OG4 found)
-#         ids = [g.id for g in window]
-#         assert "G4" in ids
-#         assert "G1" in ids
-#         assert len(window) == 2
-
-#     def test_get_window_isoforms(self, populated_genome, gene_factory):
-#         """Test get_window using isoform."""
-#         focal = populated_genome[0]  # gene_0
-#         isoforms = [f"isoform_{i + 1}" for i in range(3)]
-#         target_ogs = {f"OG_{i}" for i in range(10)}
-#         for isoform in isoforms:
-#             g = gene_factory(isoform)
-#             g.representative = focal
-#             populated_genome.add_gene(g, is_isoform=True)
-
-#             # Request window of 4
-#             window = populated_genome.get_window(g, target_ogs, window_size=4)
-
-#             # Should find OG_2 and OG_4 (the next two anchored genes)
-#             assert len(window) == 2
-#             assert [g.id for g in window] == ["gene_2", "gene_4"]
 
 
 class TestGenomeSerialization:

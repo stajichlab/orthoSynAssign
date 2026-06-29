@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from orthosynassign.lib import calculate_synteny_ratio, get_synteny_engine
+from orthosynassign.lib import calculate_synteny_ratio, get_synteny_engine, get_visualize_engine
 
 
 class TestCalculateSyntenyRatio:
@@ -114,46 +114,59 @@ class TestSyntenyEngineRefinement:
         result = engine.refine(0, window_size=2, ratio_threshold=1.0)
         assert result == []
 
-# class TestVisualizeEngine:
-#     def test_integration_get_aligned_og(self, gene_factory, genome_factory, og_factory):
-#         """
-#         Test that two neighborhoods with different focal gene offsets
-#         are shifted to match a common pivot.
-#         """
-#         g1, g2, g3 = gene_factory("G1"), gene_factory("G2"), gene_factory("G3")
-#         focal_a, focal_b = gene_factory("focal_a"), gene_factory("focal_B")
 
-#         genome_a = genome_factory("Genome_A")
-#         genome_b = genome_factory("Genome_B")
+class TestVisualizeEngine:
+    def test_integration_get_aligned_og(self, gene_factory, genome_factory, og_factory):
+        """
+        Test that two neighborhoods with different focal gene offsets
+        are shifted to match a common pivot.
+        """
+        # Setup genomes
+        genome_a = genome_factory("Genome_A")
+        genome_b = genome_factory("Genome_B")
 
-#         for g in [g_a_focal, g_a_neighbor]:
-#             genome_a.add_gene(g)
-#         for g in [g_b_focal, g_b_neighbor]:
-#             genome_b.add_gene(g)
+        # Anchor genes (the focal ones)
+        g_a_focal = gene_factory("A_focal", "chr1", 1000, 2000)
+        g_b_focal = gene_factory("B_focal", "chr1", 1000, 2000)
 
-#         # We need at least one neighbor to satisfy window_size=2
-#         # Anchor genes (the focal ones)
-#         g_a_focal = gene_factory("A_focal", "chr1", 1000, 2000)
-#         g_b_focal = gene_factory("B_focal", "chr1", 1000, 2000)
+        # Syntenic neighbors
+        g_a_neighbor = gene_factory("A_neighbor", "chr1", 2100, 3100)
+        g_b_neighbor = gene_factory("B_neighbor", "chr1", 2100, 3100)
 
-#         # Syntenic neighbors (to ensure the ratio is 1.0)
-#         g_a_neighbor = gene_factory("A_neighbor", "chr1", 2100, 3100)
-#         g_b_neighbor = gene_factory("B_neighbor", "chr1", 2100, 3100)
+        for g in [g_a_focal, g_a_neighbor]:
+            genome_a.add_gene(g)
+        for g in [g_b_focal, g_b_neighbor]:
+            genome_b.add_gene(g)
 
+        # Create orthogroups
+        focal_og = og_factory("OG_FOCAL")
+        focal_og.add_gene(g_a_focal)
+        focal_og.add_gene(g_b_focal)
 
-#         # Scenario:
-#         # Dict 1: [G1, G2, focal_A] -> focal is at index 2
-#         # Dict 2: [focal_B, G3]     -> focal is at index 0
-#         engine = get_visualize_engine()
-#         engine.get_aligned_og
-#         sog_dict = {focal_a: [g1, g2, focal_a], focal_b: [focal_b, g3]}
+        neighbor_og = og_factory("OG_NEIGHBOR")
+        neighbor_og.add_gene(g_a_neighbor)
+        neighbor_og.add_gene(g_b_neighbor)
 
-#         aligned = align_sog_dict(sog_dict)
+        genomes = [genome_a, genome_b]
+        orthogroups = [focal_og, neighbor_og]
 
-#         # The pivot should be 2 (the max index of a focal gene)
-#         # List 1: [G1, G2, focal_A] (no change to front, needs 0 backpad)
-#         # List 2: [None, None, focal_B, G3] (needs 2 frontpads to move focal_B to index 2)
+        # Build a SOG from the synteny engine
+        synteny_engine = get_synteny_engine(genomes, orthogroups)
+        sogs_raw = synteny_engine.refine(0, window_size=2, ratio_threshold=1.0)
 
-#         assert aligned[focal_a] == [g1, g2, focal_a, None]
-#         assert aligned[focal_b] == [None, None, focal_b, g3]
-#         assert len(aligned[focal_a]) == len(aligned[focal_b])
+        # Convert raw sog tuples into Orthogroup objects
+        sog_ogs = []
+        for sog in sogs_raw:
+            sog_og = og_factory("SOG_0")
+            for genome_idx, gene_idx in sog:
+                sog_og.add_gene(genomes[genome_idx][gene_idx])
+            sog_ogs.append(sog_og)
+
+        # Initialize the VisualizeEngine
+        engine = get_visualize_engine(genomes, orthogroups, sog_ogs)
+        assert engine is not None
+
+        # Test get_aligned_og for the focal OG (index 0)
+        aligned = engine.get_aligned_og(0, window_size=2, keep_all_genes=False)
+        assert aligned is not None
+        assert len(aligned) > 0

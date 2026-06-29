@@ -1,17 +1,9 @@
+from unittest.mock import MagicMock
+
 import pandas as pd
 import pytest
 
 from orthosynassign.lib import Gene, Genome, Orthogroup
-
-
-class MockGenome:
-    def __init__(self, name: str):
-        self.name = name
-
-
-class MockOrthogroup:
-    def __init__(self, og_id: str):
-        self.id = og_id
 
 
 @pytest.fixture
@@ -19,7 +11,10 @@ def mock_genome_factory():
     """Returns a function that creates MockGenome objects on demand."""
 
     def _make(name: str):
-        return MockGenome(name)
+        mock_cls = MagicMock(spec=Genome)
+        mock_obj = MagicMock(return_value=mock_cls)
+        mock_obj.name = name
+        return mock_obj
 
     return _make
 
@@ -29,7 +24,10 @@ def mock_og_factory():
     """Returns a function that creates MockOrthogroup objects on demand."""
 
     def _make(og_id: str):
-        return MockOrthogroup(og_id)
+        mock_cls = MagicMock(spec=Orthogroup)
+        mock_obj = MagicMock(return_value=mock_cls)
+        mock_obj.id = og_id
+        return mock_obj
 
     return _make
 

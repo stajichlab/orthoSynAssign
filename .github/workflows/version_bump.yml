@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           sparse-checkout: .
 
@@ -71,7 +71,7 @@ jobs:
           echo "Updated files to version $VERSION"
 
       - name: Save cache to CHANGELOG.md and CITATION.cff
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: |
             CHANGELOG.md

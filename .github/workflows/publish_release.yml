@@ -21,12 +21,12 @@ jobs:
     #   - conda-build-and-test
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           sparse-checkout: .
 
       - name: Restore cache to CHANGELOG.md and CITATION.cff
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: |
             CHANGELOG.md
@@ -52,7 +52,7 @@ jobs:
         run: git push
 
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           body: ${{ steps.query-release-info.outputs.release-notes }}
           tag_name: v${{ github.event.client_payload.version }}

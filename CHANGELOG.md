@@ -7,11 +7,13 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-06-30
+
 ### Added
 
 - Added Rust-implemented `VisualizeEngine` and utilize unified logic previously employed in the `SyntenyEngine` for visualization tasks.
 
-- Added the get_window logic for circular genome.
+- Added the get\_window logic for circular genome.
 
 ### Changed
 
@@ -61,7 +63,9 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Multiprocessing support for refinement steps.
 - Companion script to visualize the refined orthologs.
 
-[Unreleased]: https://github.com/stajichlab/orthoSynAssign/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/stajichlab/orthoSynAssign/compare/v1.2.0...HEAD
+
+[1.2.0]: https://github.com/stajichlab/orthoSynAssign/compare/v1.1.0...v1.2.0
 
 [1.1.0]: https://github.com/stajichlab/orthoSynAssign/compare/v1.0.0...v1.1.0
 

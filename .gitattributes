@@ -1,4 +1,4 @@
-/misc export-ignore
+/misc/*.svg export-ignore
 /tests export-ignore
 .github export-ignore
 .coveragerc export-ignore

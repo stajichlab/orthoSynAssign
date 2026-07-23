@@ -57,6 +57,15 @@ orthosynassign-vis = "orthosynassign.visualize:run_cli"
 features = ["pyo3/extension-module"]
 module-name = "orthosynassign.lib.rs"
 python-source = "src"
+exclude = [
+  "codecov.yml",
+  "misc/*.svg",
+  "tests/**/*",
+  ".gitattributes",
+  ".gitignore",
+  ".pre-commit-config.yaml",
+  ".github/**/*",
+]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

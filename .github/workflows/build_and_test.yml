@@ -1,4 +1,4 @@
-name: CI/build and test
+name: CI/Build and test [dev]
 
 on:
   push:
@@ -48,8 +48,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install maturin
           cargo clean
-          VIRTUAL_ENV=$pythonLocation maturin develop --release
-          pip install ".[dev]"
+          pip install .
 
       - name: Confirm package installation
         run: |
@@ -58,17 +57,9 @@ jobs:
           echo "Contents of orthosynassign/lib/:"
           ls -F src/orthosynassign/lib/
 
-      - name: Detect Package Name
-        id: detect
-        run: |
-          echo "PKG_NAME=$(basename $(find src -maxdepth 1 -type d | head -n 2 | tail -n 1))" >> $GITHUB_ENV
-
       - name: Test with pytest
         run: |
-          python -m pytest tests/ -vv \
-            --cov=${{ env.PKG_NAME }} \
-            --cov-report=xml \
-            --cov-config=pyproject.toml
+          pytest -vv --cov --cov-report=xml
 
       - name: Upload coverage.xml artifact
         uses: actions/upload-artifact@v7

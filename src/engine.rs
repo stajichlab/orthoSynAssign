@@ -135,7 +135,8 @@ impl SyntenyEngine {
                 s_gene_idx,
                 window_size,
                 self.circular_genome_vec[s_idx],
-                |idx: usize| shared_ogs.binary_search(&self.ogs_vec[s_idx][idx]).is_ok(),
+                |idx| shared_ogs.binary_search(&self.ogs_vec[s_idx][idx]).is_ok(),
+                |idx| self.ogs_vec[s_idx][idx],
                 &mut idx_buffer,
             );
             let mut win_ogs: Vec<i32> =
@@ -150,7 +151,8 @@ impl SyntenyEngine {
                 p_gene_idx,
                 window_size,
                 self.circular_genome_vec[p_idx],
-                |idx: usize| shared_ogs.binary_search(&self.ogs_vec[p_idx][idx]).is_ok(),
+                |idx| shared_ogs.binary_search(&self.ogs_vec[p_idx][idx]).is_ok(),
+                |idx| self.ogs_vec[p_idx][idx],
                 &mut idx_buffer,
             );
             if idx_buffer.is_empty() {
@@ -310,6 +312,7 @@ impl VisualizeEngine {
             window_size,
             is_circular,
             |idx| shared.binary_search(&self.ogs_vec[genome_idx][idx]).is_ok(),
+            |idx| self.ogs_vec[genome_idx][idx],
             idx_buffer,
         );
 

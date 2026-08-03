@@ -1,6 +1,5 @@
 from unittest.mock import MagicMock
 
-import pandas as pd
 import pytest
 
 from orthosynassign.lib import Gene, Genome, Orthogroup
@@ -64,20 +63,29 @@ def og_factory():
 
 @pytest.fixture
 def read_example_files(gene_factory, genome_factory, og_factory):
-    ogs_df: pd.DataFrame = pd.read_csv("tests/data/orthogroups.tsv", sep="\t", index_col=0)
+    with open("tests/data/orthogroups.tsv") as f:
+        header = f.readline().strip().split("\t")
+        samples = header[1:]
+        og_rows = {}
+        for line in f:
+            parts = line.strip().split("\t")
+            og_id = parts[0]
+            og_rows[og_id] = parts[1:]
+
     genomes = {}
-    for sample in ogs_df.columns:
-        df: pd.DataFrame = pd.read_csv(f"tests/data/{sample}.bed", sep="\t", header=None)
-        df = df[[3, 0, 1, 2]]
+    for sample in samples:
         genome = genome_factory(sample)
-        for idx, row in df.iterrows():
-            genome.add_gene(gene_factory(*row.values))
+        with open(f"tests/data/{sample}.bed") as f:
+            for line in f:
+                parts = line.strip().split("\t")
+                seqid, start, end, gene_id = parts[0], parts[1], parts[2], parts[3]
+                genome.add_gene(gene_factory(gene_id, seqid, start, end))
         genomes[sample] = genome
 
     ogs = []
-    for og_id, row in ogs_df.iterrows():
+    for og_id, gene_cols in og_rows.items():
         og = og_factory(og_id)
-        for genes, genome in zip(row.values, genomes.values()):
+        for genes, genome in zip(gene_cols, genomes.values()):
             for gene in genes.split(","):
                 og.add_gene(genome[gene.strip()])
         ogs.append(og)

@@ -86,7 +86,7 @@ class AnnotationParser(ABC):
 
                     self._parser(line_num, line, *args, **kwargs)
 
-            logger.info(f"Loaded {len(self._genome)} features from {self.file}")
+            logger.debug(f"Loaded {len(self._genome)} features from {self.file}")
         except Exception:
             self._genome = None
             raise
@@ -192,8 +192,8 @@ def read_og_table(file: str | Path, genomes: list[Genome]) -> list[Orthogroup]:
             raise ValueError("Invalid Orthogroup file: expected at least 3 columns")
 
         # First column is "Orthogroup", rest are sample names
-        samples = header[1:]
-        logger.info("Found %s samples: %s", len(samples), ", ".join(samples))
+        samples: list[str] = header[1:]
+        logger.debug("Found %s samples: %s", len(samples), ", ".join(samples))
         if genomes_dict:
             missing = set(samples) - set(genomes_dict.keys())
             if missing:
@@ -229,7 +229,7 @@ def read_og_table(file: str | Path, genomes: list[Genome]) -> list[Orthogroup]:
 
             orthogroups.append(orthogroup)
 
-    logger.info(f"Loaded {len(orthogroups)} orthogroups from {file}")
+    logger.debug(f"Loaded {len(orthogroups)} orthogroups from {file}")
     return orthogroups
 
 

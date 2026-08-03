@@ -7,6 +7,12 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Skip tandem repeated genes during `get_window` to avoid disturbance of synteny calculation.
+
+- Clean up the BED and orthogroups parsing by silencing the verbose log output.
+
 ## [1.2.0] - 2026-06-30
 
 ### Added

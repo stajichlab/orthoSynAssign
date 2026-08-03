@@ -53,30 +53,30 @@ class VisualizeEngine:
 
     def get_aligned_og(
         self, sog_idx: int, window_size: int, keep_all_genes: bool = False
-    ) -> list[tuple[tuple[int, int], list[int]]]:
+    ) -> list[tuple[tuple[int, int], list[int | None]]]:
         """Retrieves a list of genes and their corresponding windows aligned by the genes from the given orthogroup.
 
         Args:
             sog_idx (int): The index of the refined orthogroup to visualize.
             window_size (int): The size of the window to build around the genes in the orthogroup.
-            keep_all_genes (bool): whether to keep all genes even without orthgroup assignment.
+            keep_all_genes (bool): whether to keep all genes even without orthogroup assignment.
 
         Returns:
-            list[tuple[tuple[int, int], list[int]]]: A list of tuple where the focal genes indices as the first element and a list
-                of gene indices in the window as the second element.
+            list[tuple[tuple[int, int], list[int | None]]]: A list of tuples where the first element is the focal gene
+                indices and the second is the aligned window of gene indices (None for padding).
         """
         ...
 
-def get_window(og_mask_vec: list[bool], seqid_vec: list[int], gene_idx: int, window_size: int, is_circular: bool) -> list[int]:
+def get_window(
+    seqid_vec: list[int], og_vec: list[int], gene_idx: int, target_ogs: list[int], window_size: int, is_circular: bool
+) -> list[int]:
     """Retrieve the neighborhood gene indices from the focal gene index with a given window size.
 
-    This function is used to find the genes within a specified window around a focal gene. It takes into account the orthogroup
-    mask and sequence array to identify relevant genes.
-
     Args:
-        og_mask_vec (list[bool]): A boolean array representing whether each gene belongs to the target orthogroup.
         seqid_vec (list[int]): An array of sequence/scaffold IDs for genes in the genome.
+        og_vec (list[int]): An array of orthogroup indices for genes in the genome.
         gene_idx (int): The index of the focal gene.
+        target_ogs (list[int]): A list of target orthogroups to consider when building the window.
         window_size (int): The size of the window to build around the focal gene.
         is_circular (bool): A boolean indicating whether the genome is circular or not.
 
@@ -88,15 +88,12 @@ def get_window(og_mask_vec: list[bool], seqid_vec: list[int], gene_idx: int, win
 def calculate_synteny_ratio(win_a: list[int], win_b: list[int]) -> float:
     """Calculates the 1-to-1 synteny match ratio between two dynamic windows.
 
-    Specifically, this function computes the ratio of overlapping orthogroups present in both window sets. The overlap is
-    determined by finding the minimum count for each shared Orthogroup ID across the two windows.
-
     Args:
-        win_a (list[int]): A list of Orthogroup indices representing the first dynamic window.
-        win_b (list[int]): A list of Orthogroup indices representing the second dynamic window.
+        win_a (list[int]): A list of orthogroup indices representing the first dynamic window.
+        win_b (list[int]): A list of orthogroup indices representing the second dynamic window.
 
     Returns:
-        float: The synteny ratio, calculated as the number of overlapping orthogroups divided by the length of the longer window.
-        If either window is empty, the function returns 0.0.
+        float: The synteny ratio, calculated as the number of overlapping orthogroups divided by the length of the
+            longer window. If either window is empty, returns 0.0.
     """
     ...

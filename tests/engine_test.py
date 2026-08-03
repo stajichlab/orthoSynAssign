@@ -12,9 +12,10 @@ class TestCalculateSyntenyRatio:
             ([1, 2], [1, 2], 1.0, "Identical windows"),
             # 2. Partial Overlap
             ([1, 2, 3], [1, 2, 4], 2 / 3, "Partial overlap (2/3)"),
-            # 3. Tandem Duplication (1-to-1 matching)
-            ([1, 1], [1], 0.5, "A has extra; match is 1/2"),
-            ([1, 1], [1, 1], 1.0, "Both have two copies; match is 2/2"),
+            # 3. Non-consecutive duplicate OGs (e.g. A-B-A pattern), still
+            #    reachable since only consecutive tandem repeats are skipped.
+            ([1, 2, 1], [1, 2], 2 / 3, "Non-consecutive duplicate in A; 1-to-1 match is 2/3"),
+            ([1, 2, 1], [1, 2, 1], 1.0, "Both have non-consecutive duplicate; match is 3/3"),
             # 4. Order Independence
             ([1, 2], [2, 1], 1.0, "Different order, same content"),
             # 5. Length Penalization

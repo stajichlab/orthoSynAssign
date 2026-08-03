@@ -7,6 +7,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-03
+
 ### Changed
 
 - Skip tandem repeated genes during `get_window` to avoid disturbance of synteny calculation.
@@ -69,7 +71,9 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Multiprocessing support for refinement steps.
 - Companion script to visualize the refined orthologs.
 
-[Unreleased]: https://github.com/stajichlab/orthoSynAssign/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/stajichlab/orthoSynAssign/compare/v1.3.0...HEAD
+
+[1.3.0]: https://github.com/stajichlab/orthoSynAssign/compare/v1.2.0...v1.3.0
 
 [1.2.0]: https://github.com/stajichlab/orthoSynAssign/compare/v1.1.0...v1.2.0
 

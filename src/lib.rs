@@ -7,10 +7,10 @@ use pyo3::prelude::*;
 
 #[pyfunction]
 #[pyo3(name = "get_window")]
-#[pyo3(text_signature = "(og_vec, seqid_vec, gene_idx, target_ogs, window_size, is_circular)")]
+#[pyo3(text_signature = "(seqid_vec, og_vec, gene_idx, target_ogs, window_size, is_circular)")]
 pub fn get_window_py(
-    og_vec: Vec<i32>,
     seqid_vec: Vec<i16>,
+    og_vec: Vec<i32>,
     gene_idx: usize,
     mut target_ogs: Vec<i32>,
     window_size: usize,
@@ -21,11 +21,11 @@ pub fn get_window_py(
 
     get_window(
         &seqid_vec,
+        &og_vec,
         gene_idx,
+        &target_ogs,
         window_size,
         is_circular,
-        |i| target_ogs.binary_search(&og_vec[i]).is_ok(),
-        |i| og_vec[i],
         &mut result_vec,
     );
 

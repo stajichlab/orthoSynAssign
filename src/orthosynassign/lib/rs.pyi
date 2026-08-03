@@ -68,13 +68,13 @@ class VisualizeEngine:
         ...
 
 def get_window(
-    og_vec: list[int], seqid_vec: list[int], gene_idx: int, target_ogs: list[int], window_size: int, is_circular: bool
+    seqid_vec: list[int], og_vec: list[int], gene_idx: int, target_ogs: list[int], window_size: int, is_circular: bool
 ) -> list[int]:
     """Retrieve the neighborhood gene indices from the focal gene index with a given window size.
 
     Args:
-        og_vec (list[int]): An array of orthogroup indices for genes in the genome.
         seqid_vec (list[int]): An array of sequence/scaffold IDs for genes in the genome.
+        og_vec (list[int]): An array of orthogroup indices for genes in the genome.
         gene_idx (int): The index of the focal gene.
         target_ogs (list[int]): A list of target orthogroups to consider when building the window.
         window_size (int): The size of the window to build around the focal gene.

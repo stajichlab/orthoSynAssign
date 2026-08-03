@@ -132,11 +132,11 @@ impl SyntenyEngine {
         for &s_gene_idx in secondary_genes {
             get_window(
                 &self.seqids_vec[s_idx],
+                &self.ogs_vec[s_idx],
                 s_gene_idx,
+                shared_ogs,
                 window_size,
                 self.circular_genome_vec[s_idx],
-                |idx| shared_ogs.binary_search(&self.ogs_vec[s_idx][idx]).is_ok(),
-                |idx| self.ogs_vec[s_idx][idx],
                 &mut idx_buffer,
             );
             let mut win_ogs: Vec<i32> =
@@ -148,11 +148,11 @@ impl SyntenyEngine {
         for &p_gene_idx in primary_genes {
             get_window(
                 &self.seqids_vec[p_idx],
+                &self.ogs_vec[p_idx],
                 p_gene_idx,
+                shared_ogs,
                 window_size,
                 self.circular_genome_vec[p_idx],
-                |idx| shared_ogs.binary_search(&self.ogs_vec[p_idx][idx]).is_ok(),
-                |idx| self.ogs_vec[p_idx][idx],
                 &mut idx_buffer,
             );
             if idx_buffer.is_empty() {
@@ -298,7 +298,7 @@ impl VisualizeEngine {
         gene_idx: usize,
         window_size: usize,
         boundary: &mut (i32, i32),
-        shared: &[i32],
+        shared_ogs: &[i32],
         // Avoid reapted mem allocation for performance
         idx_buffer: &mut Vec<usize>,
     ) {
@@ -308,11 +308,11 @@ impl VisualizeEngine {
         // Assuming get_window utility is defined elsewhere
         get_window(
             &self.seqids_vec[genome_idx],
+            &self.ogs_vec[genome_idx],
             gene_idx,
+            shared_ogs,
             window_size,
             is_circular,
-            |idx| shared.binary_search(&self.ogs_vec[genome_idx][idx]).is_ok(),
-            |idx| self.ogs_vec[genome_idx][idx],
             idx_buffer,
         );
 

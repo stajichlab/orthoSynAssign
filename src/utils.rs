@@ -87,34 +87,31 @@ pub fn align_windows(
     aligned
 }
 
-pub fn get_window<F, G>(
+pub fn get_window(
     seqid_vec: &[i16],
+    ogs_vec: &[i32],
     gene_idx: usize,
+    shared_ogs: &[i32],
     window_size: usize,
     is_circular: bool,
-    og_is_valid: F,
-    og_value: G,
     buffer: &mut Vec<usize>,
-) where
-    F: Fn(usize) -> bool,
-    G: Fn(usize) -> i32,
-{
+) {
     if is_circular {
         get_window_circular(
             seqid_vec,
+            ogs_vec,
             gene_idx,
+            shared_ogs,
             window_size,
-            og_is_valid,
-            og_value,
             buffer,
         );
     } else {
         get_window_linear(
             seqid_vec,
+            ogs_vec,
             gene_idx,
+            shared_ogs,
             window_size,
-            og_is_valid,
-            og_value,
             buffer,
         );
     }
@@ -200,30 +197,27 @@ pub fn cluster_genes(
     result
 }
 
-fn get_window_linear<F, G>(
+fn get_window_linear(
     seqid_vec: &[i16],
+    ogs_vec: &[i32],
     gene_idx: usize,
+    shared_ogs: &[i32],
     window_size: usize,
-    og_is_valid: F,
-    og_value: G,
     buffer: &mut Vec<usize>,
-) where
-    F: Fn(usize) -> bool,
-    G: Fn(usize) -> i32,
-{
+) {
     buffer.clear();
     let half_win = window_size / 2;
     let focal_seqid = seqid_vec[gene_idx];
 
     // Look Left: scan backwards, skipping consecutive tandem repeats
+    let mut last_og = ogs_vec[gene_idx]; // initialize with focal gene's OG
     let mut left_indices = Vec::with_capacity(half_win);
     let (mut i, mut left_count) = (gene_idx, 0);
-    let mut last_og = og_value(gene_idx); // initialize with focal gene's OG
     while i > 0 && left_count < half_win {
         i -= 1;
-        if seqid_vec[i] == focal_seqid && og_is_valid(i) {
-            let og = og_value(i);
-            if og != last_og {
+        if seqid_vec[i] == focal_seqid {
+            let og = ogs_vec[i];
+            if shared_ogs.binary_search(&og).is_ok() && og != last_og {
                 left_indices.push(i);
                 left_count += 1;
                 last_og = og;
@@ -234,13 +228,13 @@ fn get_window_linear<F, G>(
     buffer.extend(left_indices.into_iter().rev());
 
     // Look Right: scan forwards, skipping consecutive tandem repeats
+    last_og = ogs_vec[gene_idx]; // reset to focal gene's OG
     let (mut j, mut right_count) = (gene_idx, 0);
-    last_og = og_value(gene_idx); // reset to focal gene's OG
     while j < seqid_vec.len() - 1 && right_count < half_win {
         j += 1;
-        if seqid_vec[j] == focal_seqid && og_is_valid(j) {
-            let og = og_value(j);
-            if og != last_og {
+        if seqid_vec[i] == focal_seqid {
+            let og = ogs_vec[j];
+            if shared_ogs.binary_search(&og).is_ok() && og != last_og {
                 buffer.push(j);
                 right_count += 1;
                 last_og = og;
@@ -249,17 +243,14 @@ fn get_window_linear<F, G>(
     }
 }
 
-fn get_window_circular<F, G>(
+fn get_window_circular(
     seqid_vec: &[i16],
+    ogs_vec: &[i32],
     gene_idx: usize,
+    shared_ogs: &[i32],
     window_size: usize,
-    og_is_valid: F,
-    og_value: G,
     buffer: &mut Vec<usize>,
-) where
-    F: Fn(usize) -> bool,
-    G: Fn(usize) -> i32,
-{
+) {
     buffer.clear();
     let half_win = window_size / 2;
     let focal_seqid = seqid_vec[gene_idx];
@@ -271,9 +262,9 @@ fn get_window_circular<F, G>(
 
     // Look Left (Counter-clockwise)
     // l_steps always increments — hard cap against highly tandem-repeated short genomes
+    let mut last_og = ogs_vec[gene_idx]; // initialize with focal gene's OG
     let mut left_indices = Vec::with_capacity(half_win);
     let (mut i, mut left_count) = (gene_idx, 0);
-    let mut last_og = og_value(gene_idx); // initialize with focal gene's OG
     let mut l_steps = 0;
 
     while left_count < half_win && l_steps < max_neighbors {
@@ -282,9 +273,9 @@ fn get_window_circular<F, G>(
         if i == gene_idx {
             break;
         }
-        if seqid_vec[i] == focal_seqid && og_is_valid(i) {
-            let og = og_value(i);
-            if og != last_og {
+        if seqid_vec[i] == focal_seqid {
+            let og = ogs_vec[i];
+            if shared_ogs.binary_search(&og).is_ok() && og != last_og {
                 left_indices.push(i);
                 left_count += 1;
                 last_og = og;
@@ -297,7 +288,7 @@ fn get_window_circular<F, G>(
     // r_steps budget is what remains after left consumed l_steps
     let (mut j, mut right_count) = (gene_idx, 0);
     let r_limit = std::cmp::min(half_win, max_neighbors - l_steps);
-    last_og = og_value(gene_idx); // reset to focal gene's OG
+    last_og = ogs_vec[gene_idx]; // reset to focal gene's OG
     let mut r_steps = 0;
 
     while right_count < r_limit && r_steps < max_neighbors - l_steps {
@@ -307,9 +298,9 @@ fn get_window_circular<F, G>(
             break;
         }
 
-        if seqid_vec[j] == focal_seqid && og_is_valid(j) {
-            let og = og_value(j);
-            if og != last_og {
+        if seqid_vec[j] == focal_seqid {
+            let og = ogs_vec[j];
+            if shared_ogs.binary_search(&og).is_ok() && og != last_og {
                 buffer.push(j);
                 right_count += 1;
                 last_og = og;

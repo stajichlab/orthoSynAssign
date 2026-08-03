@@ -14,10 +14,10 @@ authors:
     family-names: Jason Stajich
 cff-version: 1.2.0
 date-released: '2026-06-30'
-doi: 10.5281/zenodo.18762980
 identifiers:
-  - type: swh
-    value: swh:1:dir:6f6f5884a8693ae40fe4846aed5315831efc0aa5;origin=https://doi.org/10.5281/zenodo.18762979;visit=swh:1:snp:467d65b1161fa40f24c3ec13ed889818e2189742;anchor=swh:1:rel:82e21a36b641839c93949fc4c8f7630f4443385d;path=stajichlab-orthoSynAssign-1d40f5d
+  - type: doi
+    value: 10.5281/zenodo.18762979
+    description: zenodo
 license:
   - GPL-3.0-or-later
 message: If you use this software, please cite it using the metadata from this file.

@@ -1,27 +1,34 @@
-abstract:
-  <p>This is a Python re-implementation of the&nbsp;<a href="https://github.com/jl02142/OrthoRefine">OrthoRefine</a>, which is
-  written in C++ but having some issues with sample matching and memory usage. This tool is designed to be more efficient, easier
-  to use, and more flexible for custom analyses. We also provide a companion visualization
-  tool,&nbsp;<code>orthosynassign-vis</code>, for users to verify the results. This refined version includes improved memory
-  management and a streamlined workflow for assigning syntenic regions, addressing limitations identified in the original
-  OrthoRefine implementation. Specifically, it incorporates optimized data structures for handling genomic ranges and utilizes
-  more efficient algorithms for finding overlaps between ortholog groups and genomic segments. The core logic has been carefully
-  reviewed and tested to ensure accuracy and performance, focusing on robustness in handling large datasets.</p>
-authors:
-  - affiliation: University of California - Riverside
-    family-names: Cheng-Hung Tsai
-  - affiliation: University of California-Riverside
-    family-names: Jason Stajich
 cff-version: 1.2.0
-date-released: '2026-08-03'
+title: orthoSynAssign - a Python tool to refine orthogroups using synteny information
+message: If you use this software, please cite it using the metadata from this file.
+type: software
+authors:
+  - given-names: Cheng-Hung
+    family-names: Tsai
+    email: chenghung.tsai@email.ucr.edu
+    affiliation: University of California-Riverside
+    orcid: "https://orcid.org/0000-0003-3419-2146"
+  - given-names: Jason
+    family-names: Stajich
+    name-particle: E
+    email: jason.stajich@ucr.edu
+    affiliation: University of California-Riverside
+    orcid: "https://orcid.org/0000-0002-7591-0020"
 identifiers:
   - type: doi
     value: 10.5281/zenodo.18762979
     description: zenodo
-license:
-  - GPL-3.0-or-later
-message: If you use this software, please cite it using the metadata from this file.
-repository-code: https://github.com/stajichlab/orthoSynAssign/tree/v1.0.0
-title: orthoSynAssign - a Python tool to refine orthogroups using synteny information
-type: software
+repository-code: https://github.com/stajichlab/orthoSynAssign
+
+abstract: >-
+  This is a Python re-implementation of the OrthoRefine, which is written in C++ but having some issues with sample matching and
+  memory usage. This tool is designed to be more efficient, easier to use, and more flexible for custom analyses. We also provide
+  a companion visualization tool, orthosynassign-vis, for users to verify the results. This refined version includes improved
+  memory management and a streamlined workflow for assigning syntenic regions, addressing limitations identified in the original
+  OrthoRefine implementation. Specifically, it incorporates optimized data structures for handling genomic ranges and utilizes
+  more efficient algorithms for finding overlaps between ortholog groups and genomic segments. The core logic has been carefully
+  reviewed and tested to ensure accuracy and performance, focusing on robustness in handling large datasets.
+
+license: GPL-3.0-or-later
 version: 1.3.0
+date-released: "2026-08-03"

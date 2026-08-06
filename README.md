@@ -2,6 +2,8 @@
 [![Python](https://img.shields.io/badge/python-3.9_%7C_3.10_%7C_3.11_%7C_3.12_%7C_3.13_%7C_3.14-blue?logo=python)](https://github.com/stajichlab/Phyling/actions/workflows/build_and_test.yml)
 [![codecov](https://codecov.io/gh/stajichlab/orthoSynAssign/graph/badge.svg?token=mNxGMxekfv)](https://codecov.io/gh/stajichlab/orthoSynAssign)
 [![License](https://img.shields.io/github/license/stajichlab/orthoSynAssign?label=license)](https://github.com/stajichlab/orthoSynAssign/blob/main/LICENSE)
+[![Conda](https://anaconda.org/bioconda/orthosynassign/badges/version.svg)][Bioconda]
+[![Last updated](https://anaconda.org/bioconda/orthosynassign/badges/latest_release_date.svg)][Bioconda]
 [![DOI](https://zenodo.org/badge/1140709253.svg)](https://doi.org/10.5281/zenodo.18762979)
 
 # orthoSynAssign

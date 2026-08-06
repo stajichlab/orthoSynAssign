@@ -77,16 +77,6 @@ jobs:
           python -m pip install maturin pytest pytest-cov
           python -m pip install -e ".[dev]"
 
-      - name: Build Rust extension for coverage & run tests
-        run: |
-          source <(cargo llvm-cov show-env --sh)
-
-          # Test pure Rust
-          cargo test --no-default-features
-          # Test Python and PyO3
-          maturin develop
-          pytest -vv --cov-report=xml:coverage-python.xml
-
       - name: Confirm package installation
         run: |
           echo "Checking for compiled Rust binary in src/:"
@@ -94,9 +84,17 @@ jobs:
           echo "Contents of orthosynassign/lib/:"
           ls -F src/orthosynassign/lib/
 
-      - name: Generate Rust LCOV coverage report
+      - name: Build, Test, and Generate Coverage
         run: |
+          source <(cargo llvm-cov show-env --sh)
+
+          # Test pure Rust
+          cargo test --no-default-features
           cargo llvm-cov report --lcov --output-path coverage-rust.info
+
+          # Test Python and PyO3
+          maturin develop
+          pytest -vv --cov-report=xml:coverage-python.xml
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v7

@@ -79,14 +79,13 @@ jobs:
 
       - name: Build Rust extension for coverage & run tests
         run: |
-          mkdir -p target/llvm-cov-target
-          export RUSTFLAGS="-C instrument-coverage"
+          source <(cargo llvm-cov show-env --sh)
 
           # Test pure Rust
-          LLVM_PROFILE_FILE="target/llvm-cov-target/cargo-test-%p-%m.profraw" cargo test --no-default-features
+          cargo test --no-default-features
           # Test Python and PyO3
           maturin develop
-          LLVM_PROFILE_FILE="target/llvm-cov-target/coverage-%p-%m.profraw" pytest -vv --cov-report=xml:coverage-python.xml
+          pytest -vv --cov-report=xml:coverage-python.xml
 
       - name: Confirm package installation
         run: |

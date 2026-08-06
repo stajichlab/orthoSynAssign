@@ -176,3 +176,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 [numpy]: https://numpy.org/
 [pyGenomeViz]: https://github.com/moshi4/pyGenomeViz
 [Rust]: https://rust-lang.org/
+[Bioconda]: https://anaconda.org/bioconda/orthosynassign

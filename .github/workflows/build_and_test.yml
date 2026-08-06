@@ -92,7 +92,7 @@ jobs:
 
       - name: Generate Rust LCOV coverage report
         run: |
-          cargo llvm-cov report --lcov --output-path coverage-rust.info
+          cargo llvm-cov report --profraw-dir .profraws --lcov --output-path coverage-rust.info
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v7

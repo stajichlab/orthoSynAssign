@@ -53,6 +53,13 @@ jobs:
         with:
           version: "latest"
 
+      - name: Create and activate virtual environment
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          echo "VIRTUAL_ENV=$PWD/venv" >> $GITHUB_ENV
+          echo "$PWD/venv/bin" >> $GITHUB_PATH
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:

@@ -232,7 +232,7 @@ fn get_window_linear(
     let (mut j, mut right_count) = (gene_idx, 0);
     while j < seqid_vec.len() - 1 && right_count < half_win {
         j += 1;
-        if seqid_vec[i] == focal_seqid {
+        if seqid_vec[j] == focal_seqid {
             let og = ogs_vec[j];
             if shared_ogs.binary_search(&og).is_ok() && og != last_og {
                 buffer.push(j);
@@ -320,4 +320,534 @@ fn find_dsu(dsu: &mut [i32], mut i: usize) -> usize {
         i = n;
     }
     root
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_orthogroups_vec_basic() {
+        // 2 genomes, 3 orthogroups
+        // genome 0: genes assigned to OGs [0, 1, 2]
+        // genome 1: genes assigned to OGs [0, 2, -1]
+        let ogs = vec![vec![0i32, 1, 2], vec![0, 2, -1]];
+        let result = get_orthogroups_vec(3, &ogs);
+
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0], vec![(0, 0), (1, 0)]);
+        assert_eq!(result[1], vec![(0, 1)]);
+        assert_eq!(result[2], vec![(0, 2), (1, 1)]);
+    }
+
+    #[test]
+    fn test_get_orthogroups_vec_negative_ignored() {
+        let ogs = vec![vec![-1i32, -1, -1]];
+        let result = get_orthogroups_vec(3, &ogs);
+        assert_eq!(result.len(), 3);
+        for og in &result {
+            assert!(og.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_get_orthogroups_vec_out_of_range_ignored() {
+        // OG index 5 is >= num_orthogroups (3), should be ignored
+        let ogs = vec![vec![0i32, 5, 2]];
+        let result = get_orthogroups_vec(3, &ogs);
+        assert_eq!(result[0], vec![(0, 0)]);
+        assert!(result[1].is_empty());
+        assert_eq!(result[2], vec![(0, 2)]);
+    }
+
+    #[test]
+    fn test_get_orthogroups_vec_empty_ogs() {
+        let ogs: Vec<Vec<i32>> = vec![];
+        let result = get_orthogroups_vec(3, &ogs);
+        assert_eq!(result.len(), 3);
+        for og in &result {
+            assert!(og.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_get_orthogroups_vec_zero_orthogroups() {
+        let ogs = vec![vec![0i32, 1]];
+        let result = get_orthogroups_vec(0, &ogs);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_get_orthogroups_vec_empty_genome_vecs() {
+        let ogs = vec![vec![], vec![]];
+        let result = get_orthogroups_vec(2, &ogs);
+        assert_eq!(result.len(), 2);
+        for og in &result {
+            assert!(og.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_get_orthogroups_vec_multiple_genes_same_og_same_genome() {
+        // Genome 0 has two genes both in OG 0
+        let ogs = vec![vec![0i32, 0]];
+        let result = get_orthogroups_vec(1, &ogs);
+        assert_eq!(result[0], vec![(0, 0), (0, 1)]);
+    }
+
+    // --- build_shared_matrix ---
+
+    #[test]
+    fn test_build_shared_matrix_single_genome() {
+        let ogs = vec![vec![1i32, 2, 3]];
+        let matrix = build_shared_matrix(&ogs);
+        assert_eq!(matrix.len(), 1);
+        assert_eq!(matrix[0][0], vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_build_shared_matrix_two_genomes_full_overlap() {
+        let ogs = vec![vec![1i32, 2, 3], vec![1, 2, 3]];
+        let matrix = build_shared_matrix(&ogs);
+        assert_eq!(matrix[0][1], vec![1, 2, 3]);
+        assert_eq!(matrix[1][0], vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_build_shared_matrix_two_genomes_no_overlap() {
+        let ogs = vec![vec![1i32, 2], vec![3i32, 4]];
+        let matrix = build_shared_matrix(&ogs);
+        assert!(matrix[0][1].is_empty());
+        assert!(matrix[1][0].is_empty());
+    }
+
+    #[test]
+    fn test_build_shared_matrix_two_genomes_partial_overlap() {
+        let ogs = vec![vec![1i32, 2, 3], vec![2i32, 3, 4]];
+        let matrix = build_shared_matrix(&ogs);
+        assert_eq!(matrix[0][1], vec![2, 3]);
+        assert_eq!(matrix[1][0], vec![2, 3]);
+    }
+
+    #[test]
+    fn test_build_shared_matrix_ignores_minus_one() {
+        let ogs = vec![vec![-1i32, 1, 2], vec![-1i32, 1, 3]];
+        let matrix = build_shared_matrix(&ogs);
+        // -1 should not appear in shared
+        assert!(!matrix[0][1].contains(&-1));
+        assert_eq!(matrix[0][1], vec![1]);
+    }
+
+    #[test]
+    fn test_build_shared_matrix_diagonal_is_self() {
+        let ogs = vec![vec![1i32, 2, 3], vec![4i32, 5]];
+        let matrix = build_shared_matrix(&ogs);
+        assert_eq!(matrix[0][0], vec![1, 2, 3]);
+        assert_eq!(matrix[1][1], vec![4, 5]);
+    }
+
+    #[test]
+    fn test_build_shared_matrix_symmetric() {
+        let ogs = vec![vec![1i32, 2], vec![2i32, 3], vec![1i32, 3]];
+        let matrix = build_shared_matrix(&ogs);
+        for i in 0..3 {
+            for j in 0..3 {
+                assert_eq!(matrix[i][j], matrix[j][i]);
+            }
+        }
+    }
+
+    #[test]
+    fn test_build_shared_matrix_sorted_output() {
+        // Ensure the shared OGs are sorted
+        let ogs = vec![vec![3i32, 1, 2], vec![2i32, 3, 1]];
+        let matrix = build_shared_matrix(&ogs);
+        let shared = &matrix[0][1];
+        let mut sorted = shared.clone();
+        sorted.sort_unstable();
+        assert_eq!(shared, &sorted);
+    }
+
+    #[test]
+    fn test_build_shared_matrix_empty_genomes() {
+        let ogs = vec![vec![], vec![]];
+        let matrix = build_shared_matrix(&ogs);
+        assert!(matrix[0][1].is_empty());
+    }
+
+    // --- align_windows ---
+
+    #[test]
+    fn test_align_windows_empty() {
+        let result = align_windows(vec![]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_align_windows_single_row_focal_at_start() {
+        // focal gene index is 0, gene list is [0, 1, 2]
+        let input = vec![((0usize, 0usize), vec![0usize, 1, 2])];
+        let result = align_windows(input);
+        assert_eq!(result.len(), 1);
+        let (focal, row) = &result[0];
+        assert_eq!(*focal, (0, 0));
+        assert_eq!(row, &vec![Some(0), Some(1), Some(2)]);
+    }
+
+    #[test]
+    fn test_align_windows_single_row_focal_in_middle() {
+        // focal gene index is 1, gene list is [0, 1, 2]
+        let input = vec![((0usize, 1usize), vec![0usize, 1, 2])];
+        let result = align_windows(input);
+        assert_eq!(result.len(), 1);
+        let (_, row) = &result[0];
+        assert_eq!(row, &vec![Some(0), Some(1), Some(2)]);
+    }
+
+    #[test]
+    fn test_align_windows_two_rows_same_offset() {
+        // Both have focal gene at position 1
+        let input = vec![
+            ((0usize, 1usize), vec![0usize, 1, 2]),
+            ((1usize, 4usize), vec![3usize, 4, 5]),
+        ];
+        let result = align_windows(input);
+        assert_eq!(result.len(), 2);
+        // No front padding needed since both offsets are equal
+        assert_eq!(result[0].1, vec![Some(0), Some(1), Some(2)]);
+        assert_eq!(result[1].1, vec![Some(3), Some(4), Some(5)]);
+    }
+
+    #[test]
+    fn test_align_windows_front_padding() {
+        // Row 0: focal at position 0 in [10, 11, 12]
+        // Row 1: focal at position 2 in [20, 21, 22, 23]
+        // max_prefix_len = 2
+        // Row 0 gets 2 front Nones; Row 1 gets 0 front Nones
+        let input = vec![
+            ((0usize, 10usize), vec![10usize, 11, 12]),
+            ((1usize, 22usize), vec![20usize, 21, 22, 23]),
+        ];
+        let result = align_windows(input);
+        assert_eq!(result.len(), 2);
+        let (_, row0) = &result[0];
+        let (_, row1) = &result[1];
+        assert_eq!(row0[0], None);
+        assert_eq!(row0[1], None);
+        assert_eq!(row0[2], Some(10));
+        assert_eq!(row1[0], Some(20));
+        assert_eq!(row1[2], Some(22));
+    }
+
+    #[test]
+    fn test_align_windows_trailing_padding() {
+        // Row 0: focal at position 1 in [0, 1, 2, 3, 4] (5 elements)
+        // Row 1: focal at position 1 in [5, 6, 7] (3 elements)
+        // Both have same prefix length; Row 1 gets trailing Nones
+        let input = vec![
+            ((0usize, 1usize), vec![0usize, 1, 2, 3, 4]),
+            ((1usize, 6usize), vec![5usize, 6, 7]),
+        ];
+        let result = align_windows(input);
+        let (_, row1) = &result[1];
+        assert_eq!(row1.len(), 5);
+        assert_eq!(row1[3], None);
+        assert_eq!(row1[4], None);
+    }
+
+    #[test]
+    fn test_align_windows_all_rows_same_length() {
+        let input = vec![
+            ((0usize, 0usize), vec![0usize, 1, 2]),
+            ((1usize, 3usize), vec![3usize, 4, 5]),
+            ((2usize, 6usize), vec![6usize, 7, 8]),
+        ];
+        let result = align_windows(input);
+        let len = result[0].1.len();
+        for (_, row) in &result {
+            assert_eq!(row.len(), len);
+        }
+    }
+
+    #[test]
+    fn test_align_windows_focal_not_found_defaults_to_zero() {
+        // focal gene index 99 not in genes list; unwrap_or(0) kicks in
+        let input = vec![((0usize, 99usize), vec![0usize, 1, 2])];
+        let result = align_windows(input);
+        // Should not panic; offset defaults to 0
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn test_align_windows_preserves_focal_gene_key() {
+        let input = vec![((3usize, 7usize), vec![6usize, 7, 8])];
+        let result = align_windows(input);
+        assert_eq!(result[0].0, (3, 7));
+    }
+
+    #[test]
+    fn test_get_window_linear_basic() {
+        // Genome layout:
+        // Index:      0   1   2   3   4
+        // seqid_vec:  1,  1,  1,  1,  1
+        // ogs_vec:   10, 20, 30, 40, 50
+        let seqids = vec![1, 1, 1, 1, 1];
+        let ogs = vec![10, 20, 30, 40, 50];
+        let shared = vec![10, 20, 30, 40, 50]; // sorted for binary_search
+        let mut buffer = Vec::new();
+
+        // Focal gene at index 2 (og: 30), window size 4 (half_win = 2 left, 2 right)
+        get_window(&seqids, &ogs, 2, &shared, 4, false, &mut buffer);
+
+        // Expected left: [0, 1], right: [3, 4] -> combined: [0, 1, 3, 4]
+        assert_eq!(buffer, vec![0, 1, 3, 4]);
+    }
+
+    #[test]
+    fn test_calculate_synteny_ratio_empty_a() {
+        assert_eq!(calculate_synteny_ratio(&[], &[1, 2, 3]), 0.0);
+    }
+
+    #[test]
+    fn test_calculate_synteny_ratio_empty_b() {
+        assert_eq!(calculate_synteny_ratio(&[1, 2, 3], &[]), 0.0);
+    }
+
+    #[test]
+    fn test_calculate_synteny_ratio_both_empty() {
+        assert_eq!(calculate_synteny_ratio(&[], &[]), 0.0);
+    }
+
+    #[test]
+    fn test_calculate_synteny_ratio_identical() {
+        let win = vec![1, 2, 3, 4, 5];
+        assert_eq!(calculate_synteny_ratio(&win, &win), 1.0);
+    }
+
+    #[test]
+    fn test_calculate_synteny_ratio_no_overlap() {
+        let win_a = vec![1, 2, 3];
+        let win_b = vec![4, 5, 6];
+        assert_eq!(calculate_synteny_ratio(&win_a, &win_b), 0.0);
+    }
+
+    #[test]
+    fn test_calculate_synteny_ratio_partial_overlap() {
+        // win_a = [1, 2, 3], win_b = [2, 3, 4, 5]
+        // matches = 2, max_len = 4
+        let win_a = vec![1, 2, 3];
+        let win_b = vec![2, 3, 4, 5];
+        let ratio = calculate_synteny_ratio(&win_a, &win_b);
+        assert!((ratio - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_calculate_synteny_ratio_single_element_match() {
+        let win_a = vec![42];
+        let win_b = vec![42];
+        assert_eq!(calculate_synteny_ratio(&win_a, &win_b), 1.0);
+    }
+
+    #[test]
+    fn test_calculate_synteny_ratio_single_element_no_match() {
+        let win_a = vec![1];
+        let win_b = vec![2];
+        assert_eq!(calculate_synteny_ratio(&win_a, &win_b), 0.0);
+    }
+
+    #[test]
+    fn test_calculate_synteny_ratio_uses_max_len_as_denominator() {
+        // win_a has 1 element, win_b has 10 elements, 1 match
+        // ratio = 1/10
+        let win_a = vec![5];
+        let win_b = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let ratio = calculate_synteny_ratio(&win_a, &win_b);
+        assert!((ratio - 0.1).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_cluster_genes_empty_pairs() {
+        let all_genes = vec![(0usize, 0usize), (0, 1), (1, 0)];
+        let pairs = vec![];
+        let result = cluster_genes(pairs, &all_genes);
+        // Each gene is its own cluster
+        assert_eq!(result.len(), 3);
+        for cluster in &result {
+            assert_eq!(cluster.len(), 1);
+        }
+    }
+
+    #[test]
+    fn test_cluster_genes_all_connected() {
+        let all_genes = vec![(0usize, 0usize), (0, 1), (0, 2)];
+        let pairs = vec![
+            ((0usize, 0usize), (0usize, 1usize)),
+            ((0usize, 1usize), (0usize, 2usize)),
+        ];
+        let result = cluster_genes(pairs, &all_genes);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].len(), 3);
+    }
+
+    #[test]
+    fn test_cluster_genes_two_separate_clusters() {
+        let all_genes = vec![(0, 0), (0, 1), (1, 0), (1, 1)];
+        let pairs = vec![
+            ((0usize, 0usize), (0usize, 1usize)),
+            ((1usize, 0usize), (1usize, 1usize)),
+        ];
+        let result = cluster_genes(pairs, &all_genes);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].len(), 2);
+        assert_eq!(result[1].len(), 2);
+    }
+
+    #[test]
+    fn test_cluster_genes_self_pair_ignored() {
+        let all_genes = vec![(0usize, 0usize), (0, 1)];
+        let pairs = vec![((0usize, 0usize), (0usize, 0usize))];
+        let result = cluster_genes(pairs, &all_genes);
+        // Self-pair doesn't merge anything; 2 separate clusters
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_cluster_genes_unknown_gene_in_pair_ignored() {
+        let all_genes = vec![(0usize, 0usize), (0, 1)];
+        // (99, 99) not in all_genes
+        let pairs = vec![((0usize, 0usize), (99usize, 99usize))];
+        let result = cluster_genes(pairs, &all_genes);
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_cluster_genes_result_sorted() {
+        let all_genes = vec![(1, 0), (0, 0), (0, 1)];
+        let pairs = vec![((0usize, 0usize), (0usize, 1usize))];
+        let result = cluster_genes(pairs, &all_genes);
+        // Clusters sorted by first element; within cluster sorted too
+        assert_eq!(result[0][0], (0, 0));
+        assert_eq!(result[1][0], (1, 0));
+    }
+
+    #[test]
+    fn test_cluster_genes_empty_genes() {
+        let all_genes: Vec<(usize, usize)> = vec![];
+        let pairs = vec![];
+        let result = cluster_genes(pairs, &all_genes);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_get_window_linear_filters_tandem_and_unshared() {
+        // Index:      0   1   2   3   4   5
+        // seqid:      1,  1,  1,  1,  1,  1
+        // ogs:       10, 10, 99, 20, 30, 40
+        // - Index 0 & 1 are tandem repeats (og 10)
+        // - Index 2 (og 99) is NOT in shared_ogs
+        let seqids = vec![1, 1, 1, 1, 1, 1];
+        let ogs = vec![10, 10, 99, 20, 30, 40];
+        let shared = vec![10, 20, 30, 40]; // 99 missing
+        let mut buffer = Vec::new();
+
+        // Focal at index 3 (og 20), look left
+        get_window(&seqids, &ogs, 3, &shared, 4, false, &mut buffer);
+
+        // Left scan sees:
+        // - Index 2: 99 (ignored, not shared)
+        // - Index 1: 10 (kept)
+        // - Index 0: 10 (ignored, tandem repeat of index 1)
+        // Right scan sees:
+        // - Index 4: 30 (kept)
+        // - Index 5: 40 (kept)
+        assert_eq!(buffer, vec![1, 4, 5]);
+    }
+
+    #[test]
+    fn test_get_window_circular_wrap_around() {
+        // Index:      0   1   2   3
+        // seqids:     1,  1,  1,  1
+        // ogs:       10, 20, 30, 40
+        let seqids = vec![1, 1, 1, 1];
+        let ogs = vec![10, 20, 30, 40];
+        let shared = vec![10, 20, 30, 40];
+        let mut buffer = Vec::new();
+
+        // Focal at index 0 (og 10), window size 2 (1 left, 1 right)
+        get_window(&seqids, &ogs, 0, &shared, 2, true, &mut buffer);
+
+        // Left wraps to end (index 3), Right goes to index 1
+        assert_eq!(buffer, vec![3, 1]);
+    }
+
+    #[test]
+    fn test_get_window_ignores_different_seqids() {
+        // Index:      0   1   2   3   4
+        // seqids:     1,  2,  1,  2,  1  <-- mixed contigs/chromosomes
+        // ogs:       10, 20, 30, 40, 50
+        let seqids = vec![1, 2, 1, 2, 1];
+        let ogs = vec![10, 20, 30, 40, 50];
+        let shared = vec![10, 20, 30, 40, 50];
+        let mut buffer = Vec::new();
+
+        // Focal at index 2 (seqid = 1)
+        get_window(&seqids, &ogs, 2, &shared, 4, false, &mut buffer);
+
+        // Should only match indices with seqid == 1 (0 and 4)
+        assert_eq!(buffer, vec![0, 4]);
+    }
+
+    #[test]
+    fn test_find_dsu_single_element() {
+        let mut dsu = vec![-1];
+        assert_eq!(find_dsu(&mut dsu, 0), 0);
+    }
+
+    #[test]
+    fn test_find_dsu_root_is_self() {
+        // All elements are roots (negative values)
+        let mut dsu = vec![-1, -1, -1];
+        assert_eq!(find_dsu(&mut dsu, 0), 0);
+        assert_eq!(find_dsu(&mut dsu, 1), 1);
+        assert_eq!(find_dsu(&mut dsu, 2), 2);
+    }
+
+    #[test]
+    fn test_find_dsu_chain() {
+        // 0 -> 1 -> 2 (root)
+        // dsu[0] = 1, dsu[1] = 2, dsu[2] = -1
+        let mut dsu = vec![1, 2, -1];
+        assert_eq!(find_dsu(&mut dsu, 0), 2);
+        // Path compression: dsu[0] should now point directly to root (2)
+        assert_eq!(dsu[0], 2);
+    }
+
+    #[test]
+    fn test_find_dsu_path_compression() {
+        // Chain: 0 -> 1 -> 2 -> 3 (root)
+        let mut dsu = vec![1i32, 2, 3, -1];
+        assert_eq!(find_dsu(&mut dsu, 0), 3);
+        // After path compression, all nodes should point directly to root
+        assert_eq!(dsu[0], 3);
+        assert_eq!(dsu[1], 3);
+        assert_eq!(dsu[2], 3);
+        assert_eq!(dsu[3], -1); // root unchanged
+    }
+
+    #[test]
+    fn test_find_dsu_already_compressed() {
+        // 0 -> 2 (root), 1 -> 2 (root)
+        let mut dsu = vec![2i32, 2, -1];
+        assert_eq!(find_dsu(&mut dsu, 0), 2);
+        assert_eq!(find_dsu(&mut dsu, 1), 2);
+        assert_eq!(find_dsu(&mut dsu, 2), 2);
+    }
+
+    #[test]
+    fn test_find_dsu_two_separate_trees() {
+        // Tree 1: 0 -> 1 (root), Tree 2: 2 -> 3 (root)
+        let mut dsu = vec![1i32, -1, 3, -1];
+        assert_eq!(find_dsu(&mut dsu, 0), 1);
+        assert_eq!(find_dsu(&mut dsu, 2), 3);
+    }
 }

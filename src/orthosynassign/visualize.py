@@ -11,17 +11,14 @@ import sys
 import textwrap
 from collections import Counter
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar, cast
+from typing import TypeVar, cast
 
 from pygenomeviz import GenomeViz
 from pygenomeviz.utils import ColorCycler
 
 from . import AUTHOR, VERSION
 from ._utils import CustomHelpFormatter, VisualizeArgs, setup_logging, validate_annotations, validate_orthogroup
-from .lib import get_visualize_engine, read_og_table
-
-if TYPE_CHECKING:
-    from .lib import Gene
+from .lib import Gene, get_visualize_engine, read_og_table
 
 _EPILOG = textwrap.dedent(f"""\
 Examples:
@@ -98,22 +95,37 @@ def main(args: VisualizeArgs) -> int:
 
         ColorCycler.set_cmap("tab20b")
         # Generate figures for each target_sog
+        aligned_data_list: list[tuple[str, list[tuple[Gene, list[Gene]]]]] = []
         for target_sog in args.sog:
             if target_sog not in sogs_mapper:
                 logger.warning("SOG %s not found in orthogroups.", target_sog)
                 continue
 
-            logger.debug("Generate figure for %s...", target_sog)
+            logger.debug("Collect info for %s...", target_sog)
 
             engine = get_visualize_engine(genomes, old_ogs, sogs)
 
             aligned_data_idx = engine.get_aligned_og(sogs_mapper[target_sog], args.window, args.keep_all_genes)
 
-            aligned_data = {
-                genomes[genome_idx][focal_gene_idx]: [genomes[genome_idx][gene_idx] if gene_idx else None for gene_idx in genes]
+            aligned_data: list[tuple[Gene, list[Gene]]] = [
+                (
+                    genomes[genome_idx][focal_gene_idx],
+                    [genomes[genome_idx][gene_idx] if gene_idx else None for gene_idx in genes],
+                )
                 for (genome_idx, focal_gene_idx), genes in aligned_data_idx
-            }
+            ]
+            aligned_data_list.append((target_sog, aligned_data))
 
+        if args.combine and len(aligned_data_list) > 1:
+            concat_aligned_data = []
+            for idx, (target_sog, aligned_data) in enumerate(aligned_data_list):
+                concat_aligned_data.append((target_sog, ""))
+                for focal_gene, genes in aligned_data:
+                    concat_aligned_data.append((focal_gene, genes))
+
+            aligned_data_list = [("combined", concat_aligned_data)]  # Use "combined" to spy the target_sog
+
+        for target_sog, aligned_data in aligned_data_list:
             palette = _get_palette(aligned_data)
 
             output_file_path = output_dir / f"{target_sog}.{args.fmt}"
@@ -180,7 +192,7 @@ def _parse_arguments(argv=None) -> VisualizeArgs:
     )
 
     req_args.add_argument(
-        "--sog", type=str, required=True, nargs="+", help="Plot the SOG of the previous orthosynassign analysis"
+        "--sog", type=str, required=True, nargs="+", help="Plot the SOG(s) refined from the previous orthosynassign analysis"
     )
 
     opt_args = parser.add_argument_group("Options")
@@ -198,9 +210,12 @@ def _parse_arguments(argv=None) -> VisualizeArgs:
         type=Path,
         help="Output directory (default: visualize_[sog_file])",
     )
-    opt_args.add_argument("-f", "--fmt", choices=["png", "jpg", "svg", "pdf"], default="png", help="Output image format.")
+    opt_args.add_argument("-f", "--fmt", choices=["png", "jpg", "svg", "pdf"], default="png", help="Output image format")
     opt_args.add_argument(
         "-k", "--keep_all_genes", action="store_true", help="Keep genes that are not assigned to any orthogroup"
+    )
+    opt_args.add_argument(
+        "-c", "--combine", action="store_true", help="Combine all SOGs in a single figure file 'combined.[fmt]'"
     )
     opt_args.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
     opt_args.add_argument("-V", "--version", action="version", version=VERSION)
@@ -209,7 +224,7 @@ def _parse_arguments(argv=None) -> VisualizeArgs:
     return cast(VisualizeArgs, parser.parse_args(argv))
 
 
-def _get_palette(aligned_data: dict[Gene, list[Gene]]) -> dict[str, str]:
+def _get_palette(aligned_data: list[tuple[Gene, list[Gene]]]) -> dict[str, str]:
     """Prepares color palette for a SOG.
 
     Args:
@@ -220,7 +235,7 @@ def _get_palette(aligned_data: dict[Gene, list[Gene]]) -> dict[str, str]:
     """
     # Count OG occurrences to determine coloring
     og_counter = Counter()
-    for win in aligned_data.values():
+    for _, win in aligned_data:
         for gene in win:
             if gene and gene.og:
                 og_counter[gene.og.id] += 1
@@ -232,7 +247,7 @@ def _get_palette(aligned_data: dict[Gene, list[Gene]]) -> dict[str, str]:
     return palette
 
 
-def _render_sog_figure(aligned_windows: dict[Gene, list[Gene]], palette: dict[str, str], output_path: Path) -> None:
+def _render_sog_figure(aligned_windows: list[tuple[Gene, list[Gene]]], palette: dict[str, str], output_path: Path) -> None:
     """Renders the GenomeViz object and saves the file.
 
     Args:
@@ -243,25 +258,30 @@ def _render_sog_figure(aligned_windows: dict[Gene, list[Gene]], palette: dict[st
     Returns:
         None
     """
-    # Get length from the first available track
-    first_track = next(iter(aligned_windows.values()))
-    length = len(first_track)
+    # Get length from the longest track
+    length = max([len(gene_list) for _, gene_list in aligned_windows])
 
-    gv = GenomeViz(fig_width=length * 1.8, track_align_type="center")
+    gv = GenomeViz(fig_width=length * 1.8, track_align_type="left")
 
-    for focal_gene, gene_list in aligned_windows.items():
-        track_title = f"{focal_gene.id}\n{focal_gene.genome.name}"
-        track = gv.add_feature_track(track_title, length * 5 - 2)
+    for focal_gene, gene_list in aligned_windows:
+        if isinstance(focal_gene, Gene):
+            track_title = f"{focal_gene.id}\n{focal_gene.genome.name}" if isinstance(focal_gene, Gene) else focal_gene
+            track = gv.add_feature_track(track_title, length * 5 - 2)
+        else:
+            track_title = focal_gene
+            track = gv.add_feature_track(track_title, 1)
 
         for idx, gene in enumerate(gene_list):
             # Default values
             og_label = "None"
-            fc = "#cccccc"  # Default for genes without OGs
             text_weight = "normal"
 
             if gene:
                 og_label = getattr(getattr(gene, "og", None), "id", "None")
-                fc = palette.get(og_label, "#777777")
+                if og_label == "None":
+                    fc = "#dddddd"  # Default for genes without OGs
+                else:
+                    fc = palette.get(og_label, "#888888")  # OGs that are not contribute to synteny
 
                 if gene == focal_gene.representative:
                     text_weight = "bold"

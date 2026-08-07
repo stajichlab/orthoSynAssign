@@ -21,10 +21,12 @@ def args_factory(tmp_path) -> Namespace:
             "og_file": tmp_path / "default_og.tsv",
             "sog_file": tmp_path / "sog.tsv",
             "bed": tmp_path / "default.bed",
-            "output": tmp_path / "output.tsv",
             "sog": ["SOG001", "SOG002"],
+            "window": 8,
+            "output": tmp_path / "output.tsv",
             "fmt": "svg",
             "keep_all_genes": False,
+            "combine": False,
             "verbose": True,
         }
         defaults.update(kwargs)
@@ -112,19 +114,35 @@ class TestRunCli:
 
 
 # --- main ---
+@pytest.fixture
+def fake_main_env(monkeypatch, mock_genome_factory, mock_og_factory):
+    monkeypatch.setattr("orthosynassign.visualize.setup_logging", lambda verbose: None)
+
+    mock_anno1 = MagicMock()
+    mock_anno1.parse.return_value = mock_genome_factory("G1")
+    mock_anno2 = MagicMock()
+    mock_anno2.parse.return_value = mock_genome_factory("G2")
+    monkeypatch.setattr("orthosynassign.visualize.validate_annotations", lambda args: [mock_anno1, mock_anno2])
+
+    monkeypatch.setattr("orthosynassign.visualize.validate_orthogroup", lambda f: f)
+    monkeypatch.setattr(
+        "orthosynassign.visualize.read_og_table", lambda f, g: [mock_og_factory("SOG001"), mock_og_factory("SOG002")]
+    )
+
+    mock_engine = MagicMock()
+    mock_engine.get_aligned_og.return_value = []
+    monkeypatch.setattr("orthosynassign.visualize.get_visualize_engine", lambda g, o, s: mock_engine)
+    mock_render = MagicMock()
+    monkeypatch.setattr("orthosynassign.visualize._render_sog_figure", mock_render)
+
+    return {"render": mock_render}
 
 
 class TestMain:
-    def test_returns_0_on_success(self, monkeypatch, args_factory, tmp_path):
+    def test_returns_0_on_success(self, fake_main_env, args_factory, tmp_path):
         args = args_factory()
-
-        monkeypatch.setattr("orthosynassign.visualize.setup_logging", lambda verbose: None)
-        monkeypatch.setattr("orthosynassign.visualize.validate_annotations", lambda args: [])
-        monkeypatch.setattr("orthosynassign.visualize.validate_orthogroup", lambda f: f)
-        monkeypatch.setattr("orthosynassign.visualize.read_og_table", lambda f, g: [])
-        monkeypatch.setattr("orthosynassign.visualize.get_visualize_engine", lambda g, o, s: MagicMock())
-
         result = main(args)
+        fake_main_env["render"].call_count == 2
         assert result == 0
 
     def test_returns_2_on_file_not_found(self, monkeypatch, args_factory):
@@ -163,28 +181,16 @@ class TestMain:
         result = main(args)
         assert result == 130
 
-    def test_logs_start(self, monkeypatch, args_factory, caplog):
+    def test_logs_start(self, fake_main_env, args_factory, caplog):
         args = args_factory()
-
-        monkeypatch.setattr("orthosynassign.visualize.setup_logging", lambda verbose: None)
-        monkeypatch.setattr("orthosynassign.visualize.validate_annotations", lambda args: [])
-        monkeypatch.setattr("orthosynassign.visualize.validate_orthogroup", lambda f: f)
-        monkeypatch.setattr("orthosynassign.visualize.read_og_table", lambda f, g: [])
-        monkeypatch.setattr("orthosynassign.visualize.get_visualize_engine", lambda g, o, s: MagicMock())
 
         with caplog.at_level(logging.INFO):
             main(args)
 
         assert any("Starting Visualize" in record.message for record in caplog.records)
 
-    def test_warns_on_missing_sog(self, monkeypatch, args_factory, caplog):
+    def test_warns_on_missing_sog(self, fake_main_env, args_factory, caplog):
         args = args_factory(sog=["SOG_MISSING"])
-
-        monkeypatch.setattr("orthosynassign.visualize.setup_logging", lambda verbose: None)
-        monkeypatch.setattr("orthosynassign.visualize.validate_annotations", lambda args: [])
-        monkeypatch.setattr("orthosynassign.visualize.validate_orthogroup", lambda f: f)
-        monkeypatch.setattr("orthosynassign.visualize.read_og_table", lambda f, g: [])
-        monkeypatch.setattr("orthosynassign.visualize.get_visualize_engine", lambda g, o, s: MagicMock())
 
         with caplog.at_level(logging.WARNING):
             result = main(args)
@@ -192,30 +198,18 @@ class TestMain:
         assert result == 0
         assert any("SOG_MISSING" in record.message for record in caplog.records)
 
-    def test_output_dir_created(self, monkeypatch, args_factory, tmp_path):
+    def test_output_dir_created(self, fake_main_env, args_factory, tmp_path):
         output_dir = tmp_path / "my_output"
         args = args_factory(output=output_dir, sog=[])
-
-        monkeypatch.setattr("orthosynassign.visualize.setup_logging", lambda verbose: None)
-        monkeypatch.setattr("orthosynassign.visualize.validate_annotations", lambda args: [])
-        monkeypatch.setattr("orthosynassign.visualize.validate_orthogroup", lambda f: f)
-        monkeypatch.setattr("orthosynassign.visualize.read_og_table", lambda f, g: [])
-        monkeypatch.setattr("orthosynassign.visualize.get_visualize_engine", lambda g, o, s: MagicMock())
 
         result = main(args)
 
         assert result == 0
         assert output_dir.exists()
 
-    def test_default_output_dir_created(self, monkeypatch, args_factory, tmp_path):
+    def test_default_output_dir_created(self, fake_main_env, args_factory, tmp_path):
         sog_file = tmp_path / "my_sogs.tsv"
         args = args_factory(output=None, sog_file=sog_file, sog=[])
-
-        monkeypatch.setattr("orthosynassign.visualize.setup_logging", lambda verbose: None)
-        monkeypatch.setattr("orthosynassign.visualize.validate_annotations", lambda args: [])
-        monkeypatch.setattr("orthosynassign.visualize.validate_orthogroup", lambda f: f)
-        monkeypatch.setattr("orthosynassign.visualize.read_og_table", lambda f, g: [])
-        monkeypatch.setattr("orthosynassign.visualize.get_visualize_engine", lambda g, o, s: MagicMock())
 
         original_cwd = Path.cwd()
         import os
@@ -228,3 +222,11 @@ class TestMain:
 
         assert result == 0
         assert (tmp_path / f"visualize_{sog_file.stem}").exists()
+
+    def test_combine(self, fake_main_env, args_factory, tmp_path):
+        args = args_factory(combine=True)
+
+        result = main(args)
+
+        assert result == 0
+        fake_main_env["render"].assert_called_once()

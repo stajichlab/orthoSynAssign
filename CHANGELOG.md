@@ -7,9 +7,15 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added the `-c/--combine` option to `visualize.py` to generate a single figure with multiple SOGs.
+
 ### Fixed
 
-- CITATION.cff format issue.
+- Fixed a formatting issue in `CITATION.cff`.
+
+- Fixed a bug in the Rust implementation of `utils::get_window_linear`.
 
 ## [1.3.0] - 2026-08-03
 

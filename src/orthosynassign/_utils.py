@@ -56,12 +56,14 @@ class VisualizeArgs(_BaseArgs, Protocol):
         sog (str): The Sog identifier.
         fmt (str): The format for the visualization output.
         keep_all_genes (bool): Flag to keep all genes in the visualization output.
+        combine (bool): Flag to combine all SOGs in a single figure.
     """
 
     sog_file: Path
     sog: str
     fmt: str
     keep_all_genes: bool
+    combine: bool
 
 
 class CustomHelpFormatter(argparse.RawDescriptionHelpFormatter):

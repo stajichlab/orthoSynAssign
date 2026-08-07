@@ -7,6 +7,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-08-07
+
 ### Added
 
 - Added the `-c/--combine` option to `visualize.py` to generate a single figure with multiple SOGs.
@@ -81,7 +83,9 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Multiprocessing support for refinement steps.
 - Companion script to visualize the refined orthologs.
 
-[Unreleased]: https://github.com/stajichlab/orthoSynAssign/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/stajichlab/orthoSynAssign/compare/v1.3.1...HEAD
+
+[1.3.1]: https://github.com/stajichlab/orthoSynAssign/compare/v1.3.0...v1.3.1
 
 [1.3.0]: https://github.com/stajichlab/orthoSynAssign/compare/v1.2.0...v1.3.0
 

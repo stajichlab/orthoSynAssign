@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/github/license/stajichlab/orthoSynAssign?label=license)](https://github.com/stajichlab/orthoSynAssign/blob/main/LICENSE)
 [![Conda](https://anaconda.org/bioconda/orthosynassign/badges/version.svg)][Bioconda]
 [![Last updated](https://anaconda.org/bioconda/orthosynassign/badges/latest_release_date.svg)][Bioconda]
-[![DOI](https://zenodo.org/badge/1140709253.svg)](https://doi.org/10.5281/zenodo.18762979)
+[![DOI](https://img.shields.io/badge/DOI-10.64898/2026.08.10.744007-blue)](https://doi.org/10.64898/2026.08.10.744007)
 
 # orthoSynAssign
 

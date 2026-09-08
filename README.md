@@ -1,5 +1,5 @@
 [![CI/build and test](https://github.com/stajichlab/orthoSynAssign/actions/workflows/build_and_test.yml/badge.svg?branch=main)](https://github.com/stajichlab/orthoSynAssign/actions/workflows/build_and_test.yml)
-[![Python](https://img.shields.io/badge/python-3.9_%7C_3.10_%7C_3.11_%7C_3.12_%7C_3.13_%7C_3.14-blue?logo=python)](https://github.com/stajichlab/Phyling/actions/workflows/build_and_test.yml)
+[![Python](https://img.shields.io/badge/python-3.9_%7C_3.10_%7C_3.11_%7C_3.12_%7C_3.13_%7C_3.14-blue?logo=python)](https://github.com/stajichlab/orthoSynAssign/actions/workflows/build_and_test.yml)
 [![codecov](https://codecov.io/gh/stajichlab/orthoSynAssign/graph/badge.svg?token=mNxGMxekfv)](https://codecov.io/gh/stajichlab/orthoSynAssign)
 [![License](https://img.shields.io/github/license/stajichlab/orthoSynAssign?label=license)](https://github.com/stajichlab/orthoSynAssign/blob/main/LICENSE)
 [![Conda](https://anaconda.org/bioconda/orthosynassign/badges/version.svg)][Bioconda]
@@ -8,172 +8,75 @@
 
 # orthoSynAssign
 
-Ortholog Synteny Assignment Tool - A Python tool to refine orthologous groups using synteny information inferred from genome
-annotation files (BED converted from GFF3/GTF). This is a Python re-implementation of the [OrthoRefine], which is written in C++
-but had some issues with sample matching and memory usage. This tool is designed to be more efficient, easier to use, and more
-flexible for custom analyses. In addition, to ensure optimal processing speed and memory usage, the core synteny analysis is
-implemented in [Rust]. We also provide a companion visualization tool, `orthosynassign-vis`, for users to verify the results. This
-refined version includes improved memory management and a streamlined workflow for assigning syntenic regions, addressing
-limitations identified in the original OrthoRefine implementation. Specifically, it incorporates optimized data structures for
-handling genomic ranges and utilizes more efficient algorithms for finding overlaps between ortholog groups and genomic segments.
+**orthoSynAssign** (Ortholog Synteny Assignment Tool) is a Python tool to refine orthologous groups using synteny information inferred from genome annotation files (BED converted from GFF3/GTF). It is a Python re-implementation of [OrthoRefine], addressing sample-matching and memory-usage issues in the original C++ tool, with core synteny analysis implemented in [Rust] for speed and efficiency.
 
-## Usage
+Described in the preprint: [orthoSynAssign: refine orthogroups using synteny information (bioRxiv, 2026)](https://www.biorxiv.org/content/10.64898/2026.08.10.744007v1).
 
-First, install the package following the [instruction](#install) below.
+---
 
-### Refine orthogroups by synteny analysis
+## Quick Installation
 
-`orthosynassign` is the main program for running the analysis. It takes the OrthoFinder-style `orthogroup.tsv` or the `N0.tsv`
-under phylogenetic hierarchical orthogroups directory and output the refined orthogroups with synteny information determined using
-the genome annotation files.
+### Via Conda (Recommended)
 
-Most genome annotation files are distributed in GFF3 or GTF formats. However, the high degree of flexibility in the 9th attribute
-column often makes it challenging to parse specific protein IDs and match them to entries in an orthogroup file.
-
-To simplify this process, we provide a utility python script, `misc/gff2bed.py`, which converts GFF3 files into a standardized BED
-format. This script ensures that genomic coordinates are correctly linked to the protein IDs used by OrthoFinder. To align with
-orthoSynAssign's isoform processing design, please enable the `--collapse-transcripts` flag during the conversion. This action
-collapses genes with multiple isoforms into a single BED entry, and the 4th column of the resulting BED file will contain all
-associated protein IDs, concatenated using a semicolon (;) as a delimiter.
-
-[!IMPORTANT]
-If you choose to prepare your own BED files manually, you must use a semicolon (;) to separate protein IDs for multiple isoforms. orthoSynAssign is specifically programmed to use this delimiter to resolve isoform-related mapping issues automatically.
-
-The `orthogroup.tsv` or `N0.tsv` file from OrthoFinder should be tab-separated with:
-
-- First column: Orthogroup ID (e.g., OG0000001)
-- Subsequent columns: Protein IDs for each species (column headers are species names)
-
-Please use `orthosynassign --help` to see all available options and arguments:
-
-```
-Required arguments:
-  --og_file OG_FILE     Path to OrthoFinder Orthogroups.tsv file
-  --bed file [files ...]
-                        Path of BED formatted genome annotation files
-
-Options:
-  -w, --window WINDOW   Controls how many total genes are considered when determining synteny for a single gene (default: 8)
-  -r, --ratio_threshold THRESHOLD
-                        Controls how many genes within a window must provide synteny support to classify the genes being compared as syntenous (default: 0.5)
-  -o, --output OUTPUT   Output of results (default: Refined_SOGs-[YYYYMMDD-HHMMSS].tsv (UTC timestamp))
-  -t, --threads THREADS
-                        Number of cpus to use (default: 4)
-  -v, --verbose         Enable verbose logging
-  -V, --version         show program's version number and exit
-  -h, --help            show this help message and exit
+```sh
+conda install bioconda::orthosynassign
 ```
 
-We provided some example files in directory `example`, which contains three BED annotations and a orthogroup file:
+### Via Pixi
 
-```
-FungiDB-68_AfumigatusA1163.bed
-FungiDB-68_AfumigatusAf293.bed
-FungiDB-68_AnovofumigatusIBT16806.bed
-orthogroups.tsv
+```sh
+pixi global install -c bioconda orthosynassign
 ```
 
-Use the following command to run the refinement process:
+*For alternative installation options (source, developer setup), see the [Installation Guide](https://github.com/stajichlab/orthoSynAssign/wiki/Installation).*
 
-```bash
+---
+
+## Quick Start Example
+
+```sh
+cd example
+
+# Refine OrthoFinder orthogroups using synteny from the BED annotation files
 orthosynassign --og_file orthogroups.tsv --bed *.bed -o Refined_SOGs.tsv
+
+# Visualize a refined syntenic orthogroup (SOG) for verification
+orthosynassign-vis --og_file orthogroups.tsv --sog_file Refined_SOGs.tsv --bed *.bed --sog SOG000023.OG0000025 -f svg
 ```
 
-The refined result will output to `Refined_SOGs.tsv`.
+<p align="center">
+  <img src="misc/SOG000023.OG0000025.svg" alt="A refined orthogroup SOG000023" width="800">
+</p>
 
-### Visualize the refined orthogroups
+---
 
-`orthosynassign-vis` is a companion visualization script to verify the refined results of `orthosynassign`. It utilizes the
-[pyGenomeViz] to plot the orthogroups and their synteny relationships. It takes the original, unrefined `orthogroup.tsv` file along
-with the refined orthogroup file to plot a certain set of refined orthogroups using their previous orthogroup IDs as the labels
-for each gene in the plot. Please use `orthosynassign-vis --help` to see all available options and arguments:
+## Documentation & Wiki
 
-```
-Required arguments:
-  --og_file OG_FILE     Path to the original orthogroups.tsv file
-  --sog_file SOG_FILE   Path to the refined orthogroups.tsv file
-  --bed file [files ...]
-                        Path of BED formatted genome annotation files
-  --sog SOG [SOG ...]   Plot the SOG of the previous orthosynassign analysis
+Detailed documentation, full CLI argument references, and technical deep-dives are available on the **[orthoSynAssign GitHub Wiki](https://github.com/stajichlab/orthoSynAssign/wiki)**:
 
-Options:
-  -w, --window WINDOW   The window size applied to the previous orthosynassign analysis (default: 8)
-  -o, --output OUTPUT   Output directory (default: visualize_[sog_file])
-  -f, --fmt {png,jpg,svg,pdf}
-                        Output image format. (default: png)
-  -k, --keep_all_genes  Keep genes that are not assigned to any orthogroup
-  -v, --verbose         Enable verbose logging
-  -V, --version         show program's version number and exit
-  -h, --help            show this help message and exit
-```
+- **[Installation](https://github.com/stajichlab/orthoSynAssign/wiki/Installation)** — Conda, Pixi, source, and Developer Setup.
+- **[Preparing Input Files](https://github.com/stajichlab/orthoSynAssign/wiki/Preparing-Input-Files)** — OrthoFinder orthogroup files, converting GFF3/GTF to BED with `gff2bed.py`, and the isoform delimiter convention.
+- **[Quick Start](https://github.com/stajichlab/orthoSynAssign/wiki/Quick-Start)** — Walkthrough using the bundled `example` dataset.
+- **Command Reference**:
+  - **[orthosynassign](https://github.com/stajichlab/orthoSynAssign/wiki/orthosynassign)** — Main refinement command: options, window/ratio thresholds, output format.
+  - **[orthosynassign-vis](https://github.com/stajichlab/orthoSynAssign/wiki/orthosynassign-vis)** — Visualization command for verifying refined orthogroups.
+- **[Pipeline Architecture & Benchmarks](https://github.com/stajichlab/orthoSynAssign/wiki/Pipeline-Architecture)** — Algorithm overview, YGOB precision-recall evaluation, and multithreading scalability benchmarks.
+- **[Citation and References](https://github.com/stajichlab/orthoSynAssign/wiki/Citation-and-References)** — Publication metadata and citations for underlying dependencies.
 
-The `example` directory contains another refined orthogroup file - `Refined_SOGs.tsv`, say if we want to verify one of the refined
-orthogroup `SOG000039.OG0000040`:
-
-```bash
-orthosynassign-vis --og_file orthogroups.tsv --sog_file Refined_SOGs.tsv --bed *.bed --sog SOG000039.OG0000040 -f svg
-```
-
-The figure will output to `visualize_Refined_SOGs/SOG000039.OG0000040.svg`. In this figure, the genes of the observed refined
-orthogroup are labelled in yellow; genes assigned to the same orthogroup within this given window are labelled in other chromatic
-colors; genes with orthologs in other genomes located outside the given window are labelled in gray.
-
-<img src= "misc/SOG000039.OG0000040.svg" alt="A refined orthogroup SOG000039" width="800">
-
-## Requirements
-
-- [Python] >= 3.9, < 3.14
-- [numpy] >= 2.0.0
-- [pyGenomeViz] >= 1.6.0
-
-## Install
-
-### From source
-
-Clone through ssh
-
-```bash
-git clone git@github.com:stajichlab/orthoSynAssign.git
-```
-
-or https
-
-```bash
-git clone https://github.com/stajichlab/orthoSynAssign.git
-```
-
-Navigate to the project directory and install the package.
-
-```bash
-cd orthoSynAssign
-pip install .
-```
-
-### For developing
-
-Developers should clone the project directly and install the package with dev flag. Please also set up the pre-commit first before
-making commit.
-
-```bash
-pip install -e ".[dev]"
-pre-commit install
-```
+---
 
 ## Citation
 
 If you use orthoSynAssign in your research, please cite:
 
-[Cheng-Hung Tsai, & Jason Stajich. (2026). orthoSynAssign - a Python tool to refine orthogroups using synteny information [Computer software]](https://doi.org/10.5281/zenodo.18762979)
+> Tsai, C.-H., Pina Paez, C. G., & Stajich, J. E. (2026). orthoSynAssign: refine orthogroups using synteny information. *bioRxiv*. DOI: [10.64898/2026.08.10.744007](https://doi.org/10.64898/2026.08.10.744007)
 
-[Ludwig, J., Mrázek, J. OrthoRefine: automated enhancement of prior ortholog identification via synteny. BMC Bioinformatics 25, 163 (2024)](https://doi.org/10.1186/s12859-024-05786-7)
+---
 
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-[Python]: https://www.python.org/
 [OrthoRefine]: https://github.com/jl02142/OrthoRefine
-[numpy]: https://numpy.org/
-[pyGenomeViz]: https://github.com/moshi4/pyGenomeViz
 [Rust]: https://rust-lang.org/
 [Bioconda]: https://anaconda.org/bioconda/orthosynassign

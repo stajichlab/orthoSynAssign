@@ -1,0 +1,108 @@
+name: Publish
+
+# Runs when a release/v<version> pull request is merged into main: build the sdist, test it on every supported
+# Python, then tag and publish the GitHub release with the sdist attached.
+#
+# Only an sdist is published. Users install from Bioconda, and pip builds the Rust extension from the sdist.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: ["main"]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build-sdist:
+    name: Build sdist
+    # only merged release PRs opened from this repo by release.yml; skipping here skips every job below
+    if: github.event.pull_request.merged && startsWith(github.head_ref, 'release/v') && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # Full commit history without old file contents (treeless clone), so the build can find the last tag
+          # while the download stays small as history grows
+          fetch-depth: 0
+          filter: tree:0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Build sdist
+        run: pipx run build --sdist
+
+      - name: Check the built version matches the release tag
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          python -m pip install packaging
+          python - "${HEAD_REF#release/v}" dist/*.tar.gz <<'PY'
+          import sys
+          from pathlib import Path
+          from packaging.version import Version
+          expected = Version(sys.argv[1])
+          built = Version(Path(sys.argv[2]).name.removesuffix(".tar.gz").rsplit("-", 1)[1])
+          if built != expected:
+              sys.exit(f"built version {built} does not match release tag {expected}")
+          print(f"built version {built} matches the release tag")
+          PY
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  test-sdist:
+    name: Test sdist (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    needs: build-sdist
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      - name: Checkout test suite only
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            tests
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: sdist
+          path: dist
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+
+      # Building the sdist compiles the Rust extension, so the toolchain has to be present
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install from sdist
+        run: python -m pip install pytest dist/*.tar.gz
+
+      # Run against the installed package, not the source tree, so pyproject's pythonpath/coverage addopts are out
+      - name: Test with pytest
+        run: pytest -p no:cacheprovider -o addopts="" tests
+
+  publish:
+    needs: test-sdist
+    uses: stajichlab/gh_workflows/.github/workflows/release_publish.yml@v2
+    permissions:
+      contents: write
+    with:
+      artifact: sdist
+      environment: GitHub releases

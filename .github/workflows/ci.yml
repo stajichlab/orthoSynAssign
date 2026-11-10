@@ -1,0 +1,124 @@
+# Continuous integration for every push to main and every pull request:
+# lint (pre-commit), the Rust test suite with coverage, and the Python test suite on every supported Python with pip
+# and in the locked pixi dev environment. The Python test jobs use the org's shared python_test_* workflows
+# (stajichlab/gh_workflows); the pip and Rust jobs upload coverage to Codecov (flags pip-<version> and rust; needs
+# the CODECOV_TOKEN secret).
+#
+# The triggers have no path filters, so every check always reports and can be required by branch protection.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Decides whether the test jobs run. Skipped jobs are reported as passing, so required checks are satisfied:
+  # tests are skipped when only the README or other non-code files changed. Manual runs always test.
+  changes:
+    name: Detect code changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # paths-filter lists PR files through the API
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - "src/**"
+              - "tests/**"
+              - "example/**"
+              - "pyproject.toml"
+              - "pixi.lock"
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - "codecov.yml"
+              - ".github/workflows/ci.yml"
+
+  lint:
+    name: Lint (pre-commit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: pre-commit/action@v3.0.1
+
+  # The shared workflows install the project, which builds the extension module, but they do not run cargo. The Rust
+  # unit tests need the crate built without the extension-module feature, so they stay here.
+  test-rust:
+    name: Tests (cargo)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      # Without pyo3/extension-module the test binary links against libpython, so an interpreter with its shared
+      # library has to be on the runner
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      # --no-default-features drops pyo3/extension-module so the test binary links against libpython
+      - name: Test with coverage
+        run: cargo llvm-cov --no-default-features --lcov --output-path coverage-rust.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          files: ./coverage-rust.info
+          flags: rust
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # One job per Python version in requires-python = ">=3.9,<3.15"; pip install builds the extension with maturin.
+  # pytest writes coverage.xml through the addopts in pyproject.toml, which the shared workflow uploads.
+  test-pip:
+    name: Tests (pip)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.code == 'true'
+    uses: stajichlab/gh_workflows/.github/workflows/python_test_pip.yml@v2
+    with:
+      python_versions: '["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]'
+    secrets:
+      codecov_token: ${{ secrets.CODECOV_TOKEN }}
+
+  # The dev environment installs orthosynassign editable with its dev extra; pixi.lock must match pyproject.toml
+  test-pixi:
+    name: Tests (locked pixi dev environment)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.code == 'true'
+    uses: stajichlab/gh_workflows/.github/workflows/python_test_pixi.yml@v2
+    with:
+      environments: '["dev"]'

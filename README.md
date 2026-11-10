@@ -1,5 +1,5 @@
-[![CI/build and test](https://github.com/stajichlab/orthoSynAssign/actions/workflows/build_and_test.yml/badge.svg?branch=main)](https://github.com/stajichlab/orthoSynAssign/actions/workflows/build_and_test.yml)
-[![Python](https://img.shields.io/badge/python-3.9_%7C_3.10_%7C_3.11_%7C_3.12_%7C_3.13_%7C_3.14-blue?logo=python)](https://github.com/stajichlab/orthoSynAssign/actions/workflows/build_and_test.yml)
+[![CI](https://github.com/stajichlab/orthoSynAssign/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/stajichlab/orthoSynAssign/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.9_%7C_3.10_%7C_3.11_%7C_3.12_%7C_3.13_%7C_3.14-blue?logo=python)](https://github.com/stajichlab/orthoSynAssign/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/stajichlab/orthoSynAssign/graph/badge.svg?token=mNxGMxekfv)](https://codecov.io/gh/stajichlab/orthoSynAssign)
 [![License](https://img.shields.io/github/license/stajichlab/orthoSynAssign?label=license)](https://github.com/stajichlab/orthoSynAssign/blob/main/LICENSE)
 [![Conda](https://anaconda.org/bioconda/orthosynassign/badges/version.svg)][Bioconda]

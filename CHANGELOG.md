@@ -7,6 +7,13 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added a Sphinx documentation site published on Read the Docs, built from `docs/` with the MyST parser and the Furo theme and
+  configured by `.readthedocs.yaml`. The pages are the former GitHub wiki content: installation, preparing input files, quick
+  start, the `orthosynassign` and `orthosynassign-vis` command references, pipeline architecture and citation. The CHANGELOG is
+  included as a page, and the new `docs` extra installs the build dependencies.
+
 ### Fixed
 
 - Tandem in-paralogs are no longer dropped from the refined SOGs. Because each gene keeps only its single best syntenic match,

@@ -1,6 +1,7 @@
 [![CI](https://github.com/stajichlab/orthoSynAssign/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/stajichlab/orthoSynAssign/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.9_%7C_3.10_%7C_3.11_%7C_3.12_%7C_3.13_%7C_3.14-blue?logo=python)](https://github.com/stajichlab/orthoSynAssign/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/stajichlab/orthoSynAssign/graph/badge.svg?token=mNxGMxekfv)](https://codecov.io/gh/stajichlab/orthoSynAssign)
+[![Docs](https://app.readthedocs.org/projects/orthosynassign/badge/?version=latest)](https://orthosynassign.readthedocs.io/en/latest/)
 [![License](https://img.shields.io/github/license/stajichlab/orthoSynAssign?label=license)](https://github.com/stajichlab/orthoSynAssign/blob/main/LICENSE)
 [![Conda](https://anaconda.org/bioconda/orthosynassign/badges/version.svg)][Bioconda]
 [![Last updated](https://anaconda.org/bioconda/orthosynassign/badges/latest_release_date.svg)][Bioconda]
@@ -50,18 +51,18 @@ orthosynassign-vis --og_file orthogroups.tsv --sog_file Refined_SOGs.tsv --bed *
 
 ---
 
-## Documentation & Wiki
+## Documentation
 
-Detailed documentation, full CLI argument references, and technical deep-dives are available on the **[orthoSynAssign GitHub Wiki](https://github.com/stajichlab/orthoSynAssign/wiki)**:
+Detailed documentation, full CLI argument references, and technical deep-dives are available at **[orthosynassign.readthedocs.io](https://orthosynassign.readthedocs.io/)**:
 
-- **[Installation](https://github.com/stajichlab/orthoSynAssign/wiki/Installation)** — Conda, Pixi, source, and Developer Setup.
-- **[Preparing Input Files](https://github.com/stajichlab/orthoSynAssign/wiki/Preparing-Input-Files)** — OrthoFinder orthogroup files, converting GFF3/GTF to BED with `gff2bed.py`, and the isoform delimiter convention.
-- **[Quick Start](https://github.com/stajichlab/orthoSynAssign/wiki/Quick-Start)** — Walkthrough using the bundled `example` dataset.
+- **[Installation](https://orthosynassign.readthedocs.io/en/latest/installation.html)** — Bioconda, Pixi, source, and developer setup.
+- **[Preparing Input Files](https://orthosynassign.readthedocs.io/en/latest/input-files.html)** — OrthoFinder orthogroup files, converting GFF3/GTF to BED with `gff2bed.py`, and the isoform delimiter convention.
+- **[Quick Start](https://orthosynassign.readthedocs.io/en/latest/quickstart.html)** — Walkthrough using the bundled `example` dataset.
 - **Command Reference**:
-  - **[orthosynassign](https://github.com/stajichlab/orthoSynAssign/wiki/orthosynassign)** — Main refinement command: options, window/ratio thresholds, output format.
-  - **[orthosynassign-vis](https://github.com/stajichlab/orthoSynAssign/wiki/orthosynassign-vis)** — Visualization command for verifying refined orthogroups.
-- **[Pipeline Architecture & Benchmarks](https://github.com/stajichlab/orthoSynAssign/wiki/Pipeline-Architecture)** — Algorithm overview, YGOB precision-recall evaluation, and multithreading scalability benchmarks.
-- **[Citation and References](https://github.com/stajichlab/orthoSynAssign/wiki/Citation-and-References)** — Publication metadata and citations for underlying dependencies.
+  - **[orthosynassign](https://orthosynassign.readthedocs.io/en/latest/usage/orthosynassign.html)** — Main refinement command: options, window/ratio thresholds, output format.
+  - **[orthosynassign-vis](https://orthosynassign.readthedocs.io/en/latest/usage/orthosynassign-vis.html)** — Visualization command for verifying refined orthogroups.
+- **[Pipeline Architecture & Benchmarks](https://orthosynassign.readthedocs.io/en/latest/architecture.html)** — Algorithm overview and multithreading scalability benchmarks.
+- **[Citation and References](https://orthosynassign.readthedocs.io/en/latest/citation.html)** — Publication metadata and citations for underlying dependencies.
 
 ---
 

@@ -7,6 +7,15 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Tandem in-paralogs are no longer dropped from the refined SOGs. Because each gene keeps only its single best syntenic match,
+  the extra copies of a tandem array received no pairwise edge and were discarded as singletons. The new
+  `utils::rescue_tandem_paralogs` runs after clustering and attaches such a copy to the cluster of an adjacent run-mate that was
+  already validated, where the run is the consecutive genes of the same orthogroup on the same contig. Only physically adjacent
+  copies are rescued, so distant paralogs are never chained, and the rescue can only move genes that are already members of the
+  orthogroup being refined. On the bundled `example` dataset this adds 16 genes across 16 SOGs, with no gene or SOG removed.
+
 ## [1.3.1] - 2026-08-07
 
 ### Added

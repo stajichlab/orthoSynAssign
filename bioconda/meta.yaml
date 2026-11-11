@@ -6,8 +6,8 @@ package:
   version: {{ version }}
 
 source:
-  url: https://github.com/stajichlab/orthoSynAssign/archive/refs/tags/v{{ version }}.tar.gz
-  sha256: 48b742ffd02627fab54373c522814b02b26077db68ef971b31be237147279920
+  url: https://github.com/stajichlab/orthoSynAssign/releases/download/v{{ version }}/{{ name }}-{{ version }}.tar.gz
+  sha256: db80d5a0fa13221230c323744798996f87d64e6ed0266c23091fd52671b3282a
 
 build:
   number: 0

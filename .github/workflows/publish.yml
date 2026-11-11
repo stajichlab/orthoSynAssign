@@ -107,7 +107,7 @@ jobs:
       artifact: sdist
       environment: GitHub releases
 
-  # The recipe downloads GitHub's tag archive, so its sha256 can only be computed once publish has created the tag.
+  # The recipe downloads the sdist attached to the GitHub release, so hash the same sdist artifact that publish uploaded.
   bioconda-sha256:
     needs: publish
     if: needs.publish.outputs.published == 'true' && needs.publish.outputs.prerelease != 'true'
@@ -120,20 +120,19 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: main
+      - uses: actions/download-artifact@v8
+        with:
+          name: sdist
+          path: ${{ runner.temp }}/dist
       - name: Update bioconda/meta.yaml and open a pull request into main
         env:
           TAG: ${{ needs.publish.outputs.tag }}
-          REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${TAG#v}"
-          archive="$RUNNER_TEMP/${TAG}.tar.gz"
-          for attempt in 1 2 3 4 5; do
-            curl -fsSL -o "$archive" "https://github.com/${REPO}/archive/refs/tags/${TAG}.tar.gz" && break
-            echo "Archive not ready (attempt ${attempt}), retrying"; sleep 10
-          done
-          [ -s "$archive" ] || { echo "::error::Could not download the ${TAG} archive"; exit 1; }
-          SHA256=$(sha256sum "$archive" | cut -d' ' -f1)
+          sdist="$RUNNER_TEMP/dist/orthosynassign-${VERSION}.tar.gz"
+          [ -f "$sdist" ] || { echo "::error::No $(basename "$sdist") in the sdist artifact"; ls "$RUNNER_TEMP/dist"; exit 1; }
+          SHA256=$(sha256sum "$sdist" | cut -d' ' -f1)
           recipe=bioconda/meta.yaml
           sed -i -E -e "s/^(\{% set version = \")[^\"]*(\" %\})/\1${VERSION}\2/" \
             -e "s/^(  number: )[0-9]+/\10/" -e "s/^(  sha256: )[0-9a-f]+/\1${SHA256}/" "$recipe"
@@ -150,4 +149,4 @@ jobs:
           git push --force origin "$branch"
           gh pr create --base main --head "$branch" \
             --title "Update bioconda recipe to ${VERSION}" \
-            --body "Sets \`bioconda/meta.yaml\` to the released ${VERSION} with the sha256 of its GitHub tag archive (\`${SHA256}\`). Copy the same change into \`recipes/orthosynassign/meta.yaml\` in bioconda-recipes if the autobump PR has not already done it."
+            --body "Sets \`bioconda/meta.yaml\` to the released ${VERSION} with the sha256 of its release sdist (\`${SHA256}\`). Copy the same change into \`recipes/orthosynassign/meta.yaml\` in bioconda-recipes if the autobump PR has not already done it."

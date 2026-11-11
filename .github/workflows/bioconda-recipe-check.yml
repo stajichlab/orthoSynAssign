@@ -1,0 +1,23 @@
+# Weekly check that bioconda/meta.yaml is identical to the live recipe in bioconda/bioconda-recipes
+# (recipes/orthosynassign/meta.yaml). If they differ, the job fails with the diff in the job summary, so the workflow
+# badge stays red until they match again. It only reports: update the bioconda-recipes PR or bioconda/meta.yaml by hand.
+#
+# Expect this to go red between a release and the merge of the corresponding bioconda-recipes pull request.
+
+name: Bioconda recipe check
+
+on:
+  schedule:
+    - cron: "0 8 * * 1" # Mondays 08:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    uses: stajichlab/gh_workflows/.github/workflows/bioconda_recipe_check.yml@v2
+    permissions:
+      contents: read
+    with:
+      recipe_path: bioconda/meta.yaml

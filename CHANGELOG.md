@@ -7,6 +7,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-11
+
 ### Added
 
 - Added a Sphinx documentation site published on Read the Docs, built from `docs/` with the MyST parser and the Furo theme and
@@ -103,7 +105,9 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Multiprocessing support for refinement steps.
 - Companion script to visualize the refined orthologs.
 
-[Unreleased]: https://github.com/stajichlab/orthoSynAssign/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/stajichlab/orthoSynAssign/compare/v1.4.0...HEAD
+
+[1.4.0]: https://github.com/stajichlab/orthoSynAssign/compare/v1.3.1...v1.4.0
 
 [1.3.1]: https://github.com/stajichlab/orthoSynAssign/compare/v1.3.0...v1.3.1
 

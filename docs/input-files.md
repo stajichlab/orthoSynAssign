@@ -63,4 +63,4 @@ If you prepare BED files manually (without `gff2bed.py`), you **must** separate 
 
 ## Next Steps
 
-Once you have your orthogroup file and one BED file per species, continue to [Quick Start](quickstart.md) or the [orthosynassign](usage/orthosynassign.md) command reference to run the refinement.
+Once you have your orthogroup file and one BED file per species, continue to [Quick Start](quickstart.md) or the [orthosynassign](usage/orthosynassign.md) command reference to run the partitioning.

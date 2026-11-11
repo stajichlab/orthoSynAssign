@@ -27,7 +27,7 @@ abstract: >-
   This is a Python re-implementation of the OrthoRefine, which is written in C++ but having some issues with sample matching and
   memory usage. This tool is designed to be more efficient, easier to use, and more flexible for custom analyses. In addition, to
   ensure optimal processing speed and memory usage, the core synteny analysis is implemented in Rust. We also provide a companion
-  visualization tool, orthosynassign-vis, for users to verify the results. This refined version includes improved memory
+  visualization tool, orthosynassign-vis, for users to verify the results. This re-implementation includes improved memory
   management and a streamlined workflow for assigning syntenic regions, addressing limitations identified in the original
   OrthoRefine implementation. Specifically, it incorporates optimized data structures for handling genomic ranges and utilizes
   more efficient algorithms for finding overlaps between ortholog groups and genomic segments. The core logic has been carefully

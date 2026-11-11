@@ -9,7 +9,7 @@
 
 # orthoSynAssign
 
-**orthoSynAssign** (Ortholog Synteny Assignment Tool) is a Python tool to refine orthologous groups using synteny information inferred from genome annotation files (BED converted from GFF3/GTF). It is a Python re-implementation of [OrthoRefine], addressing sample-matching and memory-usage issues in the original C++ tool, with core synteny analysis implemented in [Rust] for speed and efficiency.
+**orthoSynAssign** (Ortholog Synteny Assignment Tool) is a Python tool to partition orthogroups into syntenic orthogroups (SOGs) of positional orthologs using synteny information inferred from genome annotation files (BED converted from GFF3/GTF). It is a Python re-implementation of [OrthoRefine], addressing sample-matching and memory-usage issues in the original C++ tool, with core synteny analysis implemented in [Rust] for speed and efficiency.
 
 Described in the preprint: [orthoSynAssign: refine orthogroups using synteny information (bioRxiv, 2026)](https://www.biorxiv.org/content/10.64898/2026.08.10.744007v1).
 
@@ -38,15 +38,15 @@ pixi global install -c bioconda orthosynassign
 ```sh
 cd example
 
-# Refine OrthoFinder orthogroups using synteny from the BED annotation files
+# Partition OrthoFinder orthogroups into SOGs using synteny from the BED annotation files
 orthosynassign --og_file orthogroups.tsv --bed *.bed -o Refined_SOGs.tsv
 
-# Visualize a refined syntenic orthogroup (SOG) for verification
+# Visualize a syntenic orthogroup (SOG) for verification
 orthosynassign-vis --og_file orthogroups.tsv --sog_file Refined_SOGs.tsv --bed *.bed --sog SOG000023.OG0000025 -f svg
 ```
 
 <p align="center">
-  <img src="misc/SOG000023.OG0000025.svg" alt="A refined orthogroup SOG000023" width="800">
+  <img src="misc/SOG000023.OG0000025.svg" alt="Syntenic orthogroup SOG000023" width="800">
 </p>
 
 ---
@@ -59,8 +59,8 @@ Detailed documentation, full CLI argument references, and technical deep-dives a
 - **[Preparing Input Files](https://orthosynassign.readthedocs.io/en/latest/input-files.html)** — OrthoFinder orthogroup files, converting GFF3/GTF to BED with `gff2bed.py`, and the isoform delimiter convention.
 - **[Quick Start](https://orthosynassign.readthedocs.io/en/latest/quickstart.html)** — Walkthrough using the bundled `example` dataset.
 - **Command Reference**:
-  - **[orthosynassign](https://orthosynassign.readthedocs.io/en/latest/usage/orthosynassign.html)** — Main refinement command: options, window/ratio thresholds, output format.
-  - **[orthosynassign-vis](https://orthosynassign.readthedocs.io/en/latest/usage/orthosynassign-vis.html)** — Visualization command for verifying refined orthogroups.
+  - **[orthosynassign](https://orthosynassign.readthedocs.io/en/latest/usage/orthosynassign.html)** — Main partitioning command: options, window/ratio thresholds, output format.
+  - **[orthosynassign-vis](https://orthosynassign.readthedocs.io/en/latest/usage/orthosynassign-vis.html)** — Visualization command for verifying SOGs.
 - **[Pipeline Architecture & Benchmarks](https://orthosynassign.readthedocs.io/en/latest/architecture.html)** — Algorithm overview and multithreading scalability benchmarks.
 - **[Citation and References](https://orthosynassign.readthedocs.io/en/latest/citation.html)** — Publication metadata and citations for underlying dependencies.
 

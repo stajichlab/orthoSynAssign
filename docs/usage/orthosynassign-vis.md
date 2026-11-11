@@ -1,6 +1,6 @@
 # orthosynassign-vis
 
-`orthosynassign-vis` is a companion visualization script used to verify the refined results produced by [orthosynassign](orthosynassign.md). It uses [pyGenomeViz](https://github.com/moshi4/pyGenomeViz) to plot orthogroups and their synteny relationships, taking the original unrefined `orthogroup.tsv` alongside the refined orthogroup output and plotting selected refined orthogroups (SOGs) using their previous orthogroup IDs as gene labels.
+`orthosynassign-vis` is a companion visualization script used to verify the SOGs produced by [orthosynassign](orthosynassign.md). It uses [pyGenomeViz](https://github.com/moshi4/pyGenomeViz) to plot orthogroups and their synteny relationships, taking the original `orthogroup.tsv` alongside the SOG output and plotting selected SOGs using their previous orthogroup IDs as gene labels.
 
 ---
 
@@ -25,9 +25,9 @@ orthosynassign-vis --og_file orthogroups.tsv --sog_file Refined_SOGs.tsv --bed *
 | Flag | Long Flag | Description |
 | :--- | :--- | :--- |
 | | `--og_file` | Path to the original `orthogroups.tsv` file. |
-| | `--sog_file` | Path to the refined orthogroups (`Refined_SOGs.tsv`) file. |
+| | `--sog_file` | Path to the SOG (`Refined_SOGs.tsv`) file. |
 | | `--bed` | Path of BED formatted genome annotation files. Space-separated list. |
-| | `--sog` | Plot the SOG(s) refined from the previous `orthosynassign` analysis. Space-separated list of one or more SOG IDs. |
+| | `--sog` | Plot the SOG(s) produced by the previous `orthosynassign` analysis. Space-separated list of one or more SOG IDs. |
 
 ### Options
 
@@ -43,7 +43,7 @@ orthosynassign-vis --og_file orthogroups.tsv --sog_file Refined_SOGs.tsv --bed *
 | `-h` | `--help` | | Show help message and exit. |
 
 :::{note}
-`--window` should match the `-w/--window` value used in the original `orthosynassign` run being visualized, so that the plotted genomic context matches the window that was actually used for synteny support during refinement.
+`--window` should match the `-w/--window` value used in the original `orthosynassign` run being visualized, so that the plotted genomic context matches the window that was actually used for synteny support during partitioning.
 :::
 
 `--sog` accepts one or more SOG IDs, each rendered as its own figure by default (`<output>/<sog_id>.<fmt>`). Pass `-c/--combine` to instead render all requested SOGs together into a single `<output>/combined.<fmt>` figure:
@@ -97,7 +97,7 @@ orthosynassign-vis --og_file orthogroup.tsv --sog_file Refined_SOGs.tsv --bed *.
 
 ## Reading the Output Figure
 
-- Genes belonging to the observed refined orthogroup (SOG) are labelled in **yellow**.
+- Genes belonging to the observed SOG are labelled in **yellow**.
 - Genes assigned to the same orthogroup within the given window are labelled in other chromatic colors.
 - Genes with orthologs that are **not syntenic** within the given window are labelled in **gray**.
 - Pass `-k/--keep_all_genes` to additionally display genes that were not assigned to any orthogroup.
@@ -107,15 +107,15 @@ orthosynassign-vis --og_file orthogroup.tsv --sog_file Refined_SOGs.tsv --bed *.
 The image is written to `<output>/<sog_id>.<fmt>`, e.g. `visualize_Refined_SOGs/SOG000023.OG0000025.svg`:
 
 ```{image} ../../misc/SOG000023.OG0000025.svg
-:alt: A refined orthogroup SOG000023
+:alt: Syntenic orthogroup SOG000023
 :width: 800px
 ```
 ```{image} ../../misc/SOG000024.OG0000025.svg
-:alt: A refined orthogroup SOG000024
+:alt: Syntenic orthogroup SOG000024
 :width: 800px
 ```
 ```{image} ../../misc/SOG000025.OG0000025.svg
-:alt: A refined orthogroup SOG000025
+:alt: Syntenic orthogroup SOG000025
 :width: 800px
 ```
 

@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/github/license/stajichlab/orthoSynAssign?label=license)](https://github.com/stajichlab/orthoSynAssign/blob/main/LICENSE)
 [![DOI](https://zenodo.org/badge/1140709253.svg)](https://doi.org/10.5281/zenodo.18762979)
 
-**orthoSynAssign** (Ortholog Synteny Assignment Tool) is a Python tool to refine orthologous groups using synteny information
+**orthoSynAssign** (Ortholog Synteny Assignment Tool) is a Python tool to partition orthogroups into syntenic orthogroups (SOGs) of positional orthologs using synteny information
 inferred from genome annotation files (BED converted from GFF3/GTF). It is a Python re-implementation of
 [OrthoRefine], addressing sample-matching and memory-usage issues in the original C++ tool, and is designed to be more
 efficient, easier to use, and more flexible for custom analyses.
@@ -17,7 +17,7 @@ Described in the preprint: [orthoSynAssign: refine orthogroups using synteny inf
 
 ## Key Features
 
-- **Synteny-based Refinement**: Splits complex, many-to-many OrthoFinder orthogroups into high-granularity, single-copy syntenic
+- **Synteny-based Partitioning**: Splits complex, many-to-many OrthoFinder orthogroups into high-granularity, single-copy syntenic
   orthogroups (SOGs) by comparing gene-neighborhood context across genomes.
 - **Hybrid Python/Rust Architecture**: An intuitive Python command-line interface wraps a core synteny-comparison engine written
   in [Rust], giving straightforward installation, seamless data parsing, and exceptional computational efficiency.
@@ -27,7 +27,7 @@ Described in the preprint: [orthoSynAssign: refine orthogroups using synteny inf
   reduced runtime, and a strictly bounded, thread-independent memory footprint.
 - **Configurable Synteny Window**: Tunable window size and synteny-support ratio threshold let users control the stringency of
   synteny-based orthogroup splitting.
-- **Companion Visualization Tool**: `orthosynassign-vis` uses [pyGenomeViz] to plot refined orthogroups and their syntenic context
+- **Companion Visualization Tool**: `orthosynassign-vis` uses [pyGenomeViz] to plot SOGs and their syntenic context
   for manual verification of results.
 
 ---
@@ -46,9 +46,9 @@ Described in the preprint: [orthoSynAssign: refine orthogroups using synteny inf
 
 1. Convert genome annotation files (GFF3/GTF) to BED format with `misc/gff2bed.py`, collapsing isoforms into semicolon-delimited
    protein ID lists.
-2. Run `orthosynassign` on an OrthoFinder `Orthogroups.tsv` (or `N0.tsv`) file plus the BED annotation files to produce refined,
+2. Run `orthosynassign` on an OrthoFinder `Orthogroups.tsv` (or `N0.tsv`) file plus the BED annotation files to partition them into
    syntenic orthogroups (SOGs).
-3. Optionally verify individual refined orthogroups with `orthosynassign-vis`, which renders a synteny plot for a chosen SOG
+3. Optionally verify individual SOGs with `orthosynassign-vis`, which renders a synteny plot for a chosen SOG
    using [pyGenomeViz].
 
 ---

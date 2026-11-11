@@ -1,6 +1,6 @@
 # orthosynassign
 
-`orthosynassign` is the main program for running the synteny-based orthogroup refinement analysis. It takes an OrthoFinder-style `Orthogroups.tsv` file (or `N0.tsv` under the phylogenetic hierarchical orthogroups directory) and outputs refined orthogroups annotated with synteny support, using the genome annotation BED files described in [Preparing Input Files](../input-files.md).
+`orthosynassign` is the main program for running the synteny-based orthogroup partitioning analysis. It takes an OrthoFinder-style `Orthogroups.tsv` file (or `N0.tsv` under the phylogenetic hierarchical orthogroups directory) and outputs syntenic orthogroups (SOGs) of positional orthologs, using the genome annotation BED files described in [Preparing Input Files](../input-files.md).
 
 ---
 
@@ -78,9 +78,9 @@ orthosynassign --og_file orthogroup.tsv --bed *.bed -v
 ## Tuning Window and Ratio Threshold
 
 - **`--window`** sets how many neighboring genes (total, across the comparison) are inspected when evaluating whether a gene pair is syntenic. A larger window tolerates more genomic rearrangement between the compared genomes at the cost of more permissive matching.
-- **`--ratio_threshold`** sets the minimum fraction of genes within that window that must show synteny support before a gene pair is classified as syntenic. Raising this threshold makes the refinement stricter (fewer, more confident SOGs); lowering it is more permissive.
+- **`--ratio_threshold`** sets the minimum fraction of genes within that window that must show synteny support before a gene pair is classified as syntenic. Raising this threshold makes the partitioning stricter (fewer, more confident SOGs); lowering it is more permissive.
 
-The defaults (`window=8`, `ratio_threshold=0.5`) are recommended starting points — see [Pipeline Architecture & Benchmarks](../architecture.md) for details on how the synteny-refinement algorithm works.
+The defaults (`window=8`, `ratio_threshold=0.5`) are recommended starting points — see [Pipeline Architecture & Benchmarks](../architecture.md) for details on how the synteny-based partitioning algorithm works.
 
 ---
 

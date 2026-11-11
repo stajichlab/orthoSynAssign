@@ -14,14 +14,18 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   start, the `orthosynassign` and `orthosynassign-vis` command references, pipeline architecture and citation. The CHANGELOG is
   included as a page, and the new `docs` extra installs the build dependencies.
 
-### Fixed
+### Changed
 
-- Tandem in-paralogs are no longer dropped from the refined SOGs. Because each gene keeps only its single best syntenic match,
-  the extra copies of a tandem array received no pairwise edge and were discarded as singletons. The new
-  `utils::rescue_tandem_paralogs` runs after clustering and attaches such a copy to the cluster of an adjacent run-mate that was
-  already validated, where the run is the consecutive genes of the same orthogroup on the same contig. Only physically adjacent
-  copies are rescued, so distant paralogs are never chained, and the rescue can only move genes that are already members of the
-  orthogroup being refined. On the bundled `example` dataset this adds 16 genes across 16 SOGs, with no gene or SOG removed.
+- Tandem in-paralogs are now kept in SOGs, so SOG membership can differ from v1.3.1 on the same input. Previously, because
+  each gene keeps only its single best syntenic match, the extra copies of a tandem array received no pairwise edge and were
+  discarded as singletons. The new `utils::rescue_tandem_paralogs` runs after clustering and attaches such a copy to the cluster
+  of an adjacent run-mate that was already validated, where the run is the consecutive genes of the same orthogroup on the same
+  contig. Only physically adjacent copies are rescued, so distant paralogs are never chained, and the rescue can only move genes
+  that are already members of the orthogroup being partitioned. On the bundled `example` dataset this adds 16 genes across 16
+  SOGs, with no gene or SOG removed.
+- The README, documentation and `CITATION.cff` now describe orthoSynAssign as partitioning orthogroups into syntenic orthogroups
+  (SOGs) of positional orthologs, replacing the "refine/refinement" wording.
+- Renamed the bundled example output from `example/Refined_SOGs.tsv` to `example/SOGs.tsv`.
 
 ## [1.3.1] - 2026-08-07
 

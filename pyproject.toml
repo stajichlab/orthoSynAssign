@@ -75,6 +75,9 @@ exclude = [
   ".github/**/*",
   ".readthedocs.yaml",
   "docs/**/*",
+  "example/**/*",
+  "bioconda/**/*",
+  "pixi.lock",
 ]
 
 [tool.pytest.ini_options]

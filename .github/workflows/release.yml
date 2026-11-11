@@ -1,0 +1,42 @@
+name: Release
+run-name: |
+  Release - ${{ inputs.bump_type }}${{ startsWith(inputs.bump_type, 'pre') && inputs.preid && format(' ({0})', inputs.preid) || '' }}
+
+# Manually triggered: bump the version, changelog and citation, then open a release/v<version> pull request. Merging
+# it runs publish.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "Version bump type"
+        required: true
+        type: choice
+        default: "patch"
+        options:
+          - major
+          - premajor
+          - minor
+          - preminor
+          - patch
+          - prepatch
+          - prerelease
+      preid:
+        description: "Prerelease identifier"
+        type: string
+
+jobs:
+  prepare:
+    uses: stajichlab/gh_workflows/.github/workflows/release_prepare.yml@v2
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      bump_type: ${{ inputs.bump_type }}
+      preid: ${{ inputs.preid }}
+      # The distribution version comes from Cargo.toml through maturin, so bump it there and re-sync Cargo.lock
+      additional_bump_command: |
+        sed -i "0,/^version = .*/s//version = \"$VERSION\"/" Cargo.toml
+        grep -q "^version = \"$VERSION\"" Cargo.toml
+        cargo check --locked --quiet || cargo check --quiet
+        git diff --quiet -- Cargo.lock || echo "Cargo.lock re-synced to $VERSION"

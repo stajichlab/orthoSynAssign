@@ -144,6 +144,106 @@ pub fn calculate_synteny_ratio(win_a: &[i32], win_b: &[i32]) -> f64 {
     matches as f64 / std::cmp::max(len_a, len_b) as f64
 }
 
+/// Attach unassigned tandem in-paralogs to the cluster of an adjacent run-mate.
+///
+/// A gene of the orthogroup that received no syntenic edge is a singleton cluster and
+/// would be discarded. If it sits in a tandem run (consecutive genes on the same contig
+/// of the same genome, all belonging to this orthogroup) that contains an anchored gene
+/// — one already in a cluster of size > 1 — it is a validated in-paralog of that anchor
+/// and is added to the anchor's cluster.
+///
+/// Only physically adjacent copies are rescued, so distant paralogs are never chained.
+/// Where a run holds anchors of more than one cluster, the nearest anchor wins; ties are
+/// broken by the cluster's smallest gene, keeping the result deterministic.
+pub fn rescue_tandem_paralogs(
+    clusters: &mut [Vec<(usize, usize)>],
+    ogs_vec: &[Vec<i32>],
+    seqids_vec: &[Vec<i16>],
+    circular_genome_vec: &[bool],
+) {
+    // Map every clustered gene to its cluster index.
+    let mut gene_to_cluster: HashMap<(usize, usize), usize> = HashMap::new();
+    for (c_idx, cluster) in clusters.iter().enumerate() {
+        for &gene in cluster {
+            gene_to_cluster.insert(gene, c_idx);
+        }
+    }
+
+    // Collect assignments first; applying them as we go would make the outcome
+    // depend on iteration order.
+    let mut assignments: Vec<(usize, (usize, usize))> = Vec::new();
+
+    for cluster in clusters.iter() {
+        if cluster.len() != 1 {
+            continue;
+        }
+        let (genome_idx, gene_idx) = cluster[0];
+        let ogs = &ogs_vec[genome_idx];
+        let seqids = &seqids_vec[genome_idx];
+        let n_genes = ogs.len();
+        if n_genes == 0 {
+            continue;
+        }
+        let og = ogs[gene_idx];
+        // Genes outside any orthogroup carry -1. `get_orthogroups_vec` never puts them in
+        // a cluster, but guard anyway: matching on -1 would chain unannotated neighbours.
+        if og < 0 {
+            continue;
+        }
+        let seqid = seqids[gene_idx];
+        let is_circular = circular_genome_vec[genome_idx];
+
+        // (distance, smallest gene of the anchor cluster, anchor cluster index)
+        let mut best: Option<(usize, (usize, usize), usize)> = None;
+
+        for direction in [-1i64, 1i64] {
+            let mut pos = gene_idx as i64;
+            for distance in 1..n_genes {
+                pos += direction;
+                let i = if is_circular {
+                    pos.rem_euclid(n_genes as i64) as usize
+                } else {
+                    if pos < 0 || pos >= n_genes as i64 {
+                        break;
+                    }
+                    pos as usize
+                };
+                if i == gene_idx {
+                    break;
+                }
+                // The tandem run ends at the first gene of another contig or orthogroup.
+                if seqids[i] != seqid || ogs[i] != og {
+                    break;
+                }
+                if let Some(&anchor_c) = gene_to_cluster.get(&(genome_idx, i)) {
+                    if clusters[anchor_c].len() > 1 {
+                        let key = (distance, clusters[anchor_c][0], anchor_c);
+                        if best.is_none_or(|b| key < b) {
+                            best = Some(key);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        if let Some((_, _, anchor_c)) = best {
+            assignments.push((anchor_c, (genome_idx, gene_idx)));
+        }
+    }
+
+    if assignments.is_empty() {
+        return;
+    }
+    for (anchor_c, gene) in assignments {
+        clusters[anchor_c].push(gene);
+        clusters[anchor_c].sort_unstable();
+    }
+    // A rescued gene can become its cluster's smallest member, so restore the
+    // cluster ordering that `cluster_genes` guarantees.
+    clusters.sort_unstable_by(|a, b| a[0].cmp(&b[0]));
+}
+
 pub fn cluster_genes(
     pairs: Vec<((usize, usize), (usize, usize))>,
     all_genes: &[(usize, usize)],
@@ -849,5 +949,119 @@ mod tests {
         let mut dsu = vec![1i32, -1, 3, -1];
         assert_eq!(find_dsu(&mut dsu, 0), 1);
         assert_eq!(find_dsu(&mut dsu, 2), 3);
+    }
+
+    // ---- rescue_tandem_paralogs ----
+    //
+    // Shared fixture: genome 0 has a tandem run of OG 5 at indices 1,2,3 on contig 0;
+    // genome 1 has a single OG 5 gene at index 1. Only (0,1) and (1,1) were paired.
+    fn tandem_fixture() -> (Vec<Vec<i32>>, Vec<Vec<i16>>) {
+        let ogs = vec![vec![0i32, 5, 5, 5, 7], vec![0i32, 5, 7]];
+        let seqids = vec![vec![0i16, 0, 0, 0, 0], vec![0i16, 0, 0]];
+        (ogs, seqids)
+    }
+
+    #[test]
+    fn test_rescue_tandem_paralogs_attaches_run_mates() {
+        let (ogs, seqids) = tandem_fixture();
+        let mut clusters = vec![
+            vec![(0usize, 1usize), (1usize, 1usize)],
+            vec![(0usize, 2usize)],
+            vec![(0usize, 3usize)],
+        ];
+        rescue_tandem_paralogs(&mut clusters, &ogs, &seqids, &[false, false]);
+        // Both unassigned copies join the anchored cluster; singletons are left empty
+        // for the caller's len() > 1 filter to drop.
+        assert_eq!(clusters[0], vec![(0, 1), (0, 2), (0, 3), (1, 1)]);
+        assert_eq!(clusters[1], vec![(0, 2)]);
+        assert_eq!(clusters[2], vec![(0, 3)]);
+    }
+
+    #[test]
+    fn test_rescue_tandem_paralogs_stops_at_run_boundary() {
+        // Index 4 is OG 7, so it is not part of the run and must not be rescued.
+        let (ogs, seqids) = tandem_fixture();
+        let mut clusters = vec![
+            vec![(0usize, 1usize), (1usize, 1usize)],
+            vec![(0usize, 4usize)],
+        ];
+        rescue_tandem_paralogs(&mut clusters, &ogs, &seqids, &[false, false]);
+        assert_eq!(clusters[0], vec![(0, 1), (1, 1)]);
+        assert_eq!(clusters[1], vec![(0, 4)]);
+    }
+
+    #[test]
+    fn test_rescue_tandem_paralogs_stops_at_contig_boundary() {
+        // Same OG, but index 2 sits on another contig: not a tandem run.
+        let ogs = vec![vec![5i32, 5], vec![5i32]];
+        let seqids = vec![vec![0i16, 1], vec![0i16]];
+        let mut clusters = vec![vec![(0usize, 0usize), (1usize, 0usize)], vec![(0usize, 1usize)]];
+        rescue_tandem_paralogs(&mut clusters, &ogs, &seqids, &[false, false]);
+        assert_eq!(clusters[0], vec![(0, 0), (1, 0)]);
+    }
+
+    #[test]
+    fn test_rescue_tandem_paralogs_ignores_singleton_anchor() {
+        // The only run-mate is itself unassigned, so nothing is validated.
+        let (ogs, seqids) = tandem_fixture();
+        let mut clusters = vec![vec![(0usize, 1usize)], vec![(0usize, 2usize)]];
+        rescue_tandem_paralogs(&mut clusters, &ogs, &seqids, &[false, false]);
+        assert_eq!(clusters[0], vec![(0, 1)]);
+        assert_eq!(clusters[1], vec![(0, 2)]);
+    }
+
+    #[test]
+    fn test_rescue_tandem_paralogs_nearest_anchor_wins() {
+        // Run 1,2,3 with anchors at 1 (cluster 0) and 3 (cluster 1); gene 2 is
+        // equidistant, so the tie breaks on the anchor cluster's smallest gene.
+        let (ogs, seqids) = tandem_fixture();
+        let mut clusters = vec![
+            vec![(0usize, 1usize), (1usize, 1usize)],
+            vec![(0usize, 2usize)],
+            vec![(0usize, 3usize), (1usize, 1usize)],
+        ];
+        rescue_tandem_paralogs(&mut clusters, &ogs, &seqids, &[false, false]);
+        assert_eq!(clusters[0], vec![(0, 1), (0, 2), (1, 1)]);
+    }
+
+    #[test]
+    fn test_rescue_tandem_paralogs_skips_genes_outside_any_orthogroup() {
+        // OG -1 marks a gene in no orthogroup; such genes must never chain together.
+        let ogs = vec![vec![-1i32, -1, -1], vec![-1i32]];
+        let seqids = vec![vec![0i16, 0, 0], vec![0i16]];
+        let mut clusters = vec![vec![(0usize, 0usize), (0usize, 1usize)], vec![(0usize, 2usize)]];
+        rescue_tandem_paralogs(&mut clusters, &ogs, &seqids, &[false, false]);
+        assert_eq!(clusters[0], vec![(0, 0), (0, 1)]);
+        assert_eq!(clusters[1], vec![(0, 2)]);
+    }
+
+    #[test]
+    fn test_rescue_tandem_paralogs_never_introduces_a_foreign_gene() {
+        // The rescue may only move genes that were already clustered, i.e. members of the
+        // orthogroup being refined. Index 4 (OG 7) and genome 1 are never eligible.
+        let (ogs, seqids) = tandem_fixture();
+        let before: std::collections::HashSet<(usize, usize)> =
+            [(0usize, 1usize), (1usize, 1usize), (0usize, 2usize), (0usize, 3usize)]
+                .into_iter()
+                .collect();
+        let mut clusters = vec![
+            vec![(0usize, 1usize), (1usize, 1usize)],
+            vec![(0usize, 2usize)],
+            vec![(0usize, 3usize)],
+        ];
+        rescue_tandem_paralogs(&mut clusters, &ogs, &seqids, &[false, false]);
+        let after: std::collections::HashSet<(usize, usize)> =
+            clusters.iter().flatten().copied().collect();
+        assert_eq!(after, before);
+    }
+
+    #[test]
+    fn test_rescue_tandem_paralogs_wraps_on_circular_genome() {
+        // Circular contig: index 0 and the last index are adjacent.
+        let ogs = vec![vec![5i32, 7, 5], vec![5i32]];
+        let seqids = vec![vec![0i16, 0, 0], vec![0i16]];
+        let mut clusters = vec![vec![(0usize, 0usize), (1usize, 0usize)], vec![(0usize, 2usize)]];
+        rescue_tandem_paralogs(&mut clusters, &ogs, &seqids, &[true, false]);
+        assert_eq!(clusters[0], vec![(0, 0), (0, 2), (1, 0)]);
     }
 }

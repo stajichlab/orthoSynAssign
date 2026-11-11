@@ -107,7 +107,17 @@ impl SyntenyEngine {
         // Final Sorting of refined_pairs to ensure DSU input is identical
         refined_pairs.sort_unstable();
 
-        let clusters = cluster_genes(refined_pairs, genes);
+        let mut clusters = cluster_genes(refined_pairs, genes);
+
+        // Tandem in-paralogs get no syntenic edge of their own because each gene keeps
+        // only its single best match; attach them to the run-mate that was validated.
+        rescue_tandem_paralogs(
+            &mut clusters,
+            &self.ogs_vec,
+            &self.seqids_vec,
+            &self.circular_genome_vec,
+        );
+
         clusters
             .into_iter()
             .filter(|cluster| cluster.len() > 1)

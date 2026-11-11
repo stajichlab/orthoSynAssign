@@ -45,6 +45,9 @@ env/
 coverage.xml
 htmlcov/
 
+# Documentation
+docs/_build/
+
 # Output
 output/
 results/

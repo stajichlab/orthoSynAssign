@@ -106,3 +106,48 @@ jobs:
     with:
       artifact: sdist
       environment: GitHub releases
+
+  # The recipe downloads GitHub's tag archive, so its sha256 can only be computed once publish has created the tag.
+  bioconda-sha256:
+    needs: publish
+    if: needs.publish.outputs.published == 'true' && needs.publish.outputs.prerelease != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+      - name: Update bioconda/meta.yaml and open a pull request into main
+        env:
+          TAG: ${{ needs.publish.outputs.tag }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${TAG#v}"
+          archive="$RUNNER_TEMP/${TAG}.tar.gz"
+          for attempt in 1 2 3 4 5; do
+            curl -fsSL -o "$archive" "https://github.com/${REPO}/archive/refs/tags/${TAG}.tar.gz" && break
+            echo "Archive not ready (attempt ${attempt}), retrying"; sleep 10
+          done
+          [ -s "$archive" ] || { echo "::error::Could not download the ${TAG} archive"; exit 1; }
+          SHA256=$(sha256sum "$archive" | cut -d' ' -f1)
+          recipe=bioconda/meta.yaml
+          sed -i -E -e "s/^(\{% set version = \")[^\"]*(\" %\})/\1${VERSION}\2/" \
+            -e "s/^(  number: )[0-9]+/\10/" -e "s/^(  sha256: )[0-9a-f]+/\1${SHA256}/" "$recipe"
+          grep -q "set version = \"${VERSION}\"" "$recipe" && grep -q "sha256: ${SHA256}" "$recipe"
+          if git diff --quiet -- "$recipe"; then
+            echo "bioconda/meta.yaml on main already has ${VERSION} and its sha256"
+            exit 0
+          fi
+          branch="bioconda/v${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -m "Update bioconda recipe to ${VERSION}" -- "$recipe"
+          git push --force origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "Update bioconda recipe to ${VERSION}" \
+            --body "Sets \`bioconda/meta.yaml\` to the released ${VERSION} with the sha256 of its GitHub tag archive (\`${SHA256}\`). Copy the same change into \`recipes/orthosynassign/meta.yaml\` in bioconda-recipes if the autobump PR has not already done it."

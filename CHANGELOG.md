@@ -7,6 +7,18 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- When several genes of the secondary genome tie for the best synteny ratio, every one of them now gets a pairwise edge.
+  Previously only the first in gene order was kept, so the result depended on gene order and a run of equally
+  syntenic copies could be dropped (e.g. in YGOB OG0000006, `Suva_1.97`, `Suva_1.98` and `Suva_1.100` tie with
+  `Suva_1.92` at 0.5 against the *S. cerevisiae* copies but were excluded). SOG membership can therefore differ from
+  v1.4.0 on the same input: on the YGOB dataset (20 genomes, `-w 8 -r 0.5`) 122 genes are added, none are removed and
+  23 SOGs are merged. Runtime is unchanged, as every candidate was already scored.
+- Regenerated `example/SOGs.tsv` with the new rule: 6 more genes are assigned, the SOG count is unchanged.
+- With ties kept, `utils::rescue_tandem_paralogs` no longer changes the result for linear genomes, because copies in a
+  tandem run share the same window and tie. It is kept as a safety net for circular genomes.
+
 ## [1.4.0] - 2026-11-11
 
 ### Added

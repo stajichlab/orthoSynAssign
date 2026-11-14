@@ -146,6 +146,11 @@ pub fn calculate_synteny_ratio(win_a: &[i32], win_b: &[i32]) -> f64 {
 
 /// Attach unassigned tandem in-paralogs to the cluster of an adjacent run-mate.
 ///
+/// Since `compare_gene_pairs` keeps every tied best match, copies in a tandem run on a
+/// linear contig (which share the same window) are already linked, and this pass changes
+/// nothing for them. It still matters on circular genomes, where the step-limited window
+/// can differ between run-mates.
+///
 /// A gene of the orthogroup that received no syntenic edge is a singleton cluster and
 /// would be discarded. If it sits in a tandem run (consecutive genes on the same contig
 /// of the same genome, all belonging to this orthogroup) that contains an anchored gene

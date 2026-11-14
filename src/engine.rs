@@ -109,8 +109,9 @@ impl SyntenyEngine {
 
         let mut clusters = cluster_genes(refined_pairs, genes);
 
-        // Tandem in-paralogs get no syntenic edge of their own because each gene keeps
-        // only its single best match; attach them to the run-mate that was validated.
+        // On linear contigs, copies in a tandem run share the same window and therefore tie,
+        // so keeping all tied best matches already links them. The rescue remains a safety
+        // net for circular genomes, where the step-limited window can differ between run-mates.
         rescue_tandem_paralogs(
             &mut clusters,
             &self.ogs_vec,
@@ -137,6 +138,7 @@ impl SyntenyEngine {
         let mut idx_buffer = Vec::with_capacity(window_size);
         let mut p_win_buffer = Vec::with_capacity(window_size);
         let mut refined_pairs = Vec::new();
+        let mut ratio_buffer: Vec<f64> = Vec::with_capacity(secondary_genes.len());
 
         let mut secondary_data = Vec::with_capacity(secondary_genes.len());
         for &s_gene_idx in secondary_genes {
@@ -173,19 +175,26 @@ impl SyntenyEngine {
             p_win_buffer.extend(idx_buffer.iter().map(|&i| self.ogs_vec[p_idx][i]));
             p_win_buffer.sort_unstable();
 
-            let mut best_candidate = None;
+            // First pass: score every candidate and find the best ratio.
             let mut max_r = -1.0;
-
-            for (s_gene_idx, s_ogs) in &secondary_data {
-                // Call function to calculate the ratio
+            ratio_buffer.clear();
+            for (_, s_ogs) in &secondary_data {
                 let ratio = calculate_synteny_ratio(&p_win_buffer, s_ogs);
-                if ratio >= ratio_threshold - 1e-9 && ratio > max_r + 1e-9 {
+                ratio_buffer.push(ratio);
+                if ratio > max_r {
                     max_r = ratio;
-                    best_candidate = Some(*s_gene_idx);
                 }
             }
-            if let Some(s_best) = best_candidate {
-                refined_pairs.push(((p_idx, p_gene_idx), (s_idx, s_best)));
+
+            // Second pass: keep every candidate tied for the best ratio. Keeping only the
+            // first one would make the result depend on gene order whenever several copies
+            // score the same (e.g. both arrays of a duplicated tandem cluster).
+            if max_r >= ratio_threshold - 1e-9 {
+                for ((s_gene_idx, _), &ratio) in secondary_data.iter().zip(ratio_buffer.iter()) {
+                    if ratio >= max_r - 1e-9 {
+                        refined_pairs.push(((p_idx, p_gene_idx), (s_idx, *s_gene_idx)));
+                    }
+                }
             }
         }
         refined_pairs
@@ -532,6 +541,24 @@ mod tests {
                 strict.len() <= loose.len(),
                 "Stricter threshold should yield fewer or equal clusters"
             );
+        });
+    }
+
+    #[test]
+    fn test_refine_keeps_all_tied_best_matches() {
+        Python::attach(|py| {
+            // Genome 1 holds two copies of OG 0 (index 2 on contig 0, index 6 on contig 1) with
+            // identical flanks, so genome 0's single copy ties between them at ratio 1.0. The
+            // old first-wins rule kept only (1, 2); both copies must now join the SOG.
+            let engine = SyntenyEngine::new(
+                4,
+                vec![vec![1i32, 2, 0, 3, -1], vec![1i32, 2, 0, 3, 1, 2, 0, 3]],
+                vec![vec![0i16; 5], vec![0i16, 0, 0, 0, 1, 1, 1, 1]],
+                vec![false, false],
+            )
+            .unwrap();
+            let clusters = engine.refine(py, 0, 4, 0.5);
+            assert_eq!(clusters, vec![vec![(0, 2), (1, 2), (1, 6)]]);
         });
     }
 

@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from orthosynassign.visualize import AUTHOR, VERSION, main, run_cli
+from orthosynassign.visualize import AUTHOR, VERSION, _collapse_tracks, _track_label, main, run_cli
 
 
 @pytest.fixture
@@ -26,6 +26,7 @@ def args_factory(tmp_path) -> Namespace:
             "output": tmp_path / "output.tsv",
             "fmt": "svg",
             "keep_all_genes": False,
+            "collapse": "tandem",
             "combine": False,
             "verbose": True,
         }
@@ -230,3 +231,113 @@ class TestMain:
 
         assert result == 0
         fake_main_env["render"].assert_called_once()
+
+
+# --- _collapse_tracks ---
+
+
+@pytest.fixture
+def collapse_env(gene_factory, genome_factory):
+    """Builds a genome whose genes 0..5 sit on one contig, plus a second genome.
+
+    Returns:
+        tuple: (genome_a, genome_b) with 6 and 2 genes respectively.
+    """
+    genome_a = genome_factory("A")
+    for i in range(6):
+        genome_a.add_gene(gene_factory(f"A{i}", "scaf1"))
+    genome_b = genome_factory("B")
+    for i in range(2):
+        genome_b.add_gene(gene_factory(f"B{i}", "scaf1"))
+    return genome_a, genome_b
+
+
+class TestCollapseTracks:
+    def test_none_keeps_every_track(self, collapse_env):
+        genome_a, _ = collapse_env
+        aligned = [(genome_a[2], [genome_a[1], genome_a[2]]), (genome_a[3], [genome_a[2], genome_a[3]])]
+
+        result = _collapse_tracks(aligned, "none")
+
+        assert [focal for focal, _, _ in result] == [genome_a[2], genome_a[3]]
+        assert [members for _, _, members in result] == [[genome_a[2]], [genome_a[3]]]
+
+    def test_tandem_collapses_adjacent_focal_genes(self, collapse_env):
+        genome_a, _ = collapse_env
+        # A2, A3 and A4 form one tandem run; A2 keeps the widest window
+        aligned = [
+            (genome_a[2], [genome_a[1], genome_a[2], genome_a[3], genome_a[4]]),
+            (genome_a[3], [genome_a[2], genome_a[3]]),
+            (genome_a[4], [genome_a[3], genome_a[4]]),
+        ]
+
+        result = _collapse_tracks(aligned, "tandem")
+
+        assert len(result) == 1
+        focal, window, members = result[0]
+        assert focal is genome_a[2]
+        assert len(window) == 4
+        assert members == [genome_a[2], genome_a[3], genome_a[4]]
+
+    def test_tandem_keeps_non_adjacent_focal_genes_apart(self, collapse_env):
+        genome_a, _ = collapse_env
+        aligned = [
+            (genome_a[1], [genome_a[1], genome_a[2], genome_a[3]]),
+            (genome_a[3], [genome_a[1], genome_a[2], genome_a[3]]),
+        ]
+
+        result = _collapse_tracks(aligned, "tandem")
+
+        assert [focal for focal, _, _ in result] == [genome_a[1], genome_a[3]]
+
+    def test_window_collapses_overlapping_windows(self, collapse_env):
+        genome_a, _ = collapse_env
+        # A1 and A3 are not adjacent, but their windows share A2
+        aligned = [
+            (genome_a[1], [genome_a[1], genome_a[2]]),
+            (genome_a[3], [genome_a[2], genome_a[3]]),
+        ]
+
+        result = _collapse_tracks(aligned, "window")
+
+        assert len(result) == 1
+        assert result[0][2] == [genome_a[1], genome_a[3]]
+
+    def test_window_keeps_disjoint_windows_apart(self, collapse_env):
+        genome_a, _ = collapse_env
+        aligned = [
+            (genome_a[0], [genome_a[0], genome_a[1]]),
+            (genome_a[4], [genome_a[4], genome_a[5]]),
+        ]
+
+        result = _collapse_tracks(aligned, "window")
+
+        assert [focal for focal, _, _ in result] == [genome_a[0], genome_a[4]]
+
+    def test_never_collapses_across_genomes(self, collapse_env):
+        genome_a, genome_b = collapse_env
+        aligned = [(genome_a[0], [genome_a[0], genome_a[1]]), (genome_b[0], [genome_b[0], genome_b[1]])]
+
+        for mode in ("tandem", "window"):
+            result = _collapse_tracks(aligned, mode)
+            assert [focal for focal, _, _ in result] == [genome_a[0], genome_b[0]]
+
+    def test_unknown_mode_raises(self, collapse_env):
+        genome_a, _ = collapse_env
+        aligned = [(genome_a[0], [genome_a[0]]), (genome_a[1], [genome_a[1]])]
+
+        with pytest.raises(ValueError, match="Unknown collapse mode"):
+            _collapse_tracks(aligned, "nope")
+
+
+# --- _track_label ---
+
+
+class TestTrackLabel:
+    def test_single_gene(self, collapse_env):
+        genome_a, _ = collapse_env
+        assert _track_label([genome_a[0]]) == "A0"
+
+    def test_truncates_long_groups(self, collapse_env):
+        genome_a, _ = collapse_env
+        assert _track_label(list(genome_a[0:5])) == "A0\nA1\nA2\n(+2 more)"

@@ -37,6 +37,7 @@ orthosynassign-vis --og_file orthogroups.tsv --sog_file Refined_SOGs.tsv --bed *
 | `-o` | `--output` | `visualize_[sog_file]` | Output directory. |
 | `-f` | `--fmt` | `png` | Output image format (`png`, `jpg`, `svg`, or `pdf`). |
 | `-k` | `--keep_all_genes` | `False` | Keep genes that are not assigned to any orthogroup. |
+| | `--collapse` | `tandem` | Collapse focal genes of the same genome into a single track (`tandem`, `window` or `none`). |
 | `-c` | `--combine` | `False` | Combine all SOGs in a single figure file `combined.[fmt]`. |
 | `-v` | `--verbose` | `False` | Enable verbose logging. |
 | `-V` | `--version` | | Show program's version number and exit. |
@@ -45,6 +46,25 @@ orthosynassign-vis --og_file orthogroups.tsv --sog_file Refined_SOGs.tsv --bed *
 :::{note}
 `--window` should match the `-w/--window` value used in the original `orthosynassign` run being visualized, so that the plotted genomic context matches the window that was actually used for synteny support during partitioning.
 :::
+
+### Collapsing focal genes
+
+A SOG can hold several focal genes from the same genome, for instance a run of tandem copies. Each of them is drawn as its own track by default, which repeats nearly the same genomic context many times. `--collapse` merges such tracks:
+
+| Mode | Behaviour |
+| :--- | :--- |
+| `tandem` (default) | Focal genes of the same genome that sit next to each other on the same contig are drawn as one track. |
+| `window` | Focal genes of the same genome whose plotted windows share at least one gene are drawn as one track. This is broader than `tandem` and also merges copies separated by a few genes. |
+| `none` | No collapsing: one track per focal gene, as in v1.4.0 and earlier. |
+
+Collapsing is transitive, so a run of three tandem copies becomes a single track. The kept track is the one whose window shows the most genes, its title lists the collapsed gene IDs (truncated to three plus a count), and every focal gene of the group is drawn in the focal gene color `#fcfc42`.
+
+```sh
+orthosynassign-vis --og_file orthogroups.tsv --sog_file Refined_SOGs.tsv --bed *.bed \
+  --sog SOG000023.OG0000025 --collapse window
+```
+
+---
 
 `--sog` accepts one or more SOG IDs, each rendered as its own figure by default (`<output>/<sog_id>.<fmt>`). Pass `-c/--combine` to instead render all requested SOGs together into a single `<output>/combined.<fmt>` figure:
 

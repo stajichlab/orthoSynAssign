@@ -9,7 +9,8 @@ import argparse
 import logging
 import sys
 import textwrap
-from collections import Counter
+from collections import Counter, defaultdict
+from itertools import combinations
 from pathlib import Path
 from typing import TypeVar, cast
 
@@ -35,6 +36,9 @@ orthosynassign --og_file orthogroup.tsv --sog_file Refined_SOGs.tsv --bed *.bed 
 # Save in svg format:
 orthosynassign-vis --og_file orthogroup.tsv --sog_file Refined_SOGs.tsv --bed *.bed --sog SOG000001.OG0000001 -f svg
 
+# Collapse tracks whose windows overlap instead of only tandem copies:
+orthosynassign-vis --og_file orthogroup.tsv --sog_file Refined_SOGs.tsv --bed *.bed --sog SOG000001.OG0000001 --collapse window
+
 # With verbose output:
 orthosynassign-vis --og_file orthogroup.tsv --sog_file Refined_SOGs.tsv --bed *.bed --sog SOG000001.OG0000001 -v
 
@@ -42,6 +46,12 @@ Written by {AUTHOR}
 """)
 
 _T = TypeVar("Type")
+
+#: Color used to highlight the focal gene(s) of a track.
+_FOCAL_COLOR = "#fcfc42"
+
+#: Available modes for --collapse.
+COLLAPSE_MODES = ("tandem", "window", "none")
 
 
 def run_cli() -> None:
@@ -95,7 +105,7 @@ def main(args: VisualizeArgs) -> int:
 
         ColorCycler.set_cmap("tab20b")
         # Generate figures for each target_sog
-        aligned_data_list: list[tuple[str, list[tuple[Gene, list[Gene]]]]] = []
+        aligned_data_list: list[tuple[str, list[tuple[Gene, list[Gene], list[Gene]]]]] = []
         for target_sog in args.sog:
             if target_sog not in sogs_mapper:
                 logger.warning("SOG %s not found in orthogroups.", target_sog)
@@ -114,14 +124,23 @@ def main(args: VisualizeArgs) -> int:
                 )
                 for (genome_idx, focal_gene_idx), genes in aligned_data_idx
             ]
-            aligned_data_list.append((target_sog, aligned_data))
+            collapsed_data = _collapse_tracks(aligned_data, args.collapse)
+            if len(collapsed_data) < len(aligned_data):
+                logger.info(
+                    "%s: collapsed %d focal genes into %d tracks (--collapse %s)",
+                    target_sog,
+                    len(aligned_data),
+                    len(collapsed_data),
+                    args.collapse,
+                )
+            aligned_data_list.append((target_sog, collapsed_data))
 
         if args.combine and len(aligned_data_list) > 1:
             concat_aligned_data = []
             for idx, (target_sog, aligned_data) in enumerate(aligned_data_list):
-                concat_aligned_data.append((target_sog, ""))
-                for focal_gene, genes in aligned_data:
-                    concat_aligned_data.append((focal_gene, genes))
+                concat_aligned_data.append((target_sog, "", []))
+                for focal_gene, genes, members in aligned_data:
+                    concat_aligned_data.append((focal_gene, genes, members))
 
             aligned_data_list = [("combined", concat_aligned_data)]  # Use "combined" to spy the target_sog
 
@@ -215,6 +234,17 @@ def _parse_arguments(argv=None) -> VisualizeArgs:
         "-k", "--keep_all_genes", action="store_true", help="Keep genes that are not assigned to any orthogroup"
     )
     opt_args.add_argument(
+        "--collapse",
+        choices=list(COLLAPSE_MODES),
+        default="tandem",
+        help=(
+            "Collapse focal genes of the same genome into a single track: "
+            "'tandem' collapses focal genes that sit next to each other, "
+            "'window' collapses focal genes whose windows overlap, "
+            "'none' disables collapsing"
+        ),
+    )
+    opt_args.add_argument(
         "-c", "--combine", action="store_true", help="Combine all SOGs in a single figure file 'combined.[fmt]'"
     )
     opt_args.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
@@ -224,7 +254,114 @@ def _parse_arguments(argv=None) -> VisualizeArgs:
     return cast(VisualizeArgs, parser.parse_args(argv))
 
 
-def _get_palette(aligned_data: list[tuple[Gene, list[Gene]]]) -> dict[str, str]:
+def _collapse_tracks(
+    aligned_data: list[tuple[Gene, list[Gene]]], mode: str = "tandem"
+) -> list[tuple[Gene, list[Gene], list[Gene]]]:
+    """Collapses focal genes of the same genome into a single track.
+
+    Args:
+        aligned_data (list[tuple[Gene, list[Gene]]]): Focal genes and their aligned windows.
+        mode (str): "tandem" collapses focal genes that are adjacent on the same contig,
+            "window" collapses focal genes whose windows overlap, "none" disables collapsing.
+
+    Returns:
+        list[tuple[Gene, list[Gene], list[Gene]]]: The focal gene, the aligned window and the
+        focal genes represented by each kept track.
+
+    Raises:
+        ValueError: If an unknown mode is given.
+    """
+    if mode not in COLLAPSE_MODES:
+        raise ValueError(f"Unknown collapse mode: {mode}. Choose from {', '.join(COLLAPSE_MODES)}.")
+
+    if mode == "none" or len(aligned_data) < 2:
+        return [(focal_gene, window, [focal_gene]) for focal_gene, window in aligned_data]
+
+    collapsed: list[tuple[Gene, list[Gene], list[Gene]]] = []
+    for group in _group_tracks(aligned_data, mode):
+        # Keep the window that shows the most genes, so the collapsed copies stay visible.
+        kept = max(group, key=lambda idx: (sum(1 for gene in aligned_data[idx][1] if gene), -idx))
+        members = [aligned_data[idx][0] for idx in group]
+        collapsed.append((aligned_data[kept][0], aligned_data[kept][1], members))
+
+    return collapsed
+
+
+def _group_tracks(aligned_data: list[tuple[Gene, list[Gene]]], mode: str) -> list[list[int]]:
+    """Groups the indices of the tracks that should be collapsed together.
+
+    Only focal genes of the same genome are ever grouped. Grouping is transitive, so a run of
+    three tandem copies ends up in a single group.
+
+    Args:
+        aligned_data (list[tuple[Gene, list[Gene]]]): Focal genes and their aligned windows.
+        mode (str): Either "tandem" or "window".
+
+    Returns:
+        list[list[int]]: Groups of track indices, each sorted, ordered by their first track.
+    """
+    parent = list(range(len(aligned_data)))
+
+    def find(idx: int) -> int:
+        while parent[idx] != idx:
+            parent[idx] = parent[parent[idx]]
+            idx = parent[idx]
+        return idx
+
+    def union(a: int, b: int) -> None:
+        root_a, root_b = find(a), find(b)
+        if root_a != root_b:
+            parent[max(root_a, root_b)] = min(root_a, root_b)
+
+    by_genome: dict[str, list[int]] = defaultdict(list)
+    for idx, (focal_gene, _) in enumerate(aligned_data):
+        genome_name = focal_gene.genome.name if focal_gene.genome else ""
+        by_genome[genome_name].append(idx)
+
+    for indices in by_genome.values():
+        for a, b in combinations(indices, 2):
+            if mode == "tandem":
+                should_collapse = _is_tandem(aligned_data[a][0], aligned_data[b][0])
+            else:
+                should_collapse = bool(_window_keys(aligned_data[a][1]) & _window_keys(aligned_data[b][1]))
+            if should_collapse:
+                union(a, b)
+
+    groups: dict[int, list[int]] = defaultdict(list)
+    for idx in range(len(aligned_data)):
+        groups[find(idx)].append(idx)
+
+    return [groups[root] for root in sorted(groups)]
+
+
+def _is_tandem(gene_a: Gene, gene_b: Gene) -> bool:
+    """Reports whether two genes sit next to each other on the same contig.
+
+    Args:
+        gene_a (Gene): The first gene.
+        gene_b (Gene): The second gene.
+
+    Returns:
+        bool: True if both genes are adjacent on the same contig.
+    """
+    if gene_a.seqid != gene_b.seqid or gene_a.index is None or gene_b.index is None:
+        return False
+    return abs(gene_a.index - gene_b.index) == 1
+
+
+def _window_keys(window: list[Gene]) -> set[tuple[str, int]]:
+    """Collects the identity of the genes present in a window.
+
+    Args:
+        window (list[Gene]): The genes of an aligned window, padding included.
+
+    Returns:
+        set[tuple[str, int]]: One (contig, gene index) key per gene of the window.
+    """
+    return {(gene.seqid, gene.index) for gene in window if gene and gene.index is not None}
+
+
+def _get_palette(aligned_data: list[tuple[Gene, list[Gene], list[Gene]]]) -> dict[str, str]:
     """Prepares color palette for a SOG.
 
     Args:
@@ -235,7 +372,7 @@ def _get_palette(aligned_data: list[tuple[Gene, list[Gene]]]) -> dict[str, str]:
     """
     # Count OG occurrences to determine coloring
     og_counter = Counter()
-    for _, win in aligned_data:
+    for _, win, _ in aligned_data:
         for gene in win:
             if gene and gene.og:
                 og_counter[gene.og.id] += 1
@@ -247,11 +384,14 @@ def _get_palette(aligned_data: list[tuple[Gene, list[Gene]]]) -> dict[str, str]:
     return palette
 
 
-def _render_sog_figure(aligned_windows: list[tuple[Gene, list[Gene]]], palette: dict[str, str], output_path: Path) -> None:
+def _render_sog_figure(
+    aligned_windows: list[tuple[Gene, list[Gene], list[Gene]]], palette: dict[str, str], output_path: Path
+) -> None:
     """Renders the GenomeViz object and saves the file.
 
     Args:
-        aligned_windows (dict[Gene, list[Gene]]): A dictionary of genes and their corresponding aligned windows.
+        aligned_windows (list[tuple[Gene, list[Gene], list[Gene]]]): The focal gene, its aligned
+            window and the focal genes the track represents (more than one when collapsed).
         palette (dict[str, str]): A color palette for the SOG.
         output_path (Path): The path where the rendered figure should be saved.
 
@@ -259,17 +399,21 @@ def _render_sog_figure(aligned_windows: list[tuple[Gene, list[Gene]]], palette: 
         None
     """
     # Get length from the longest track
-    length = max([len(gene_list) for _, gene_list in aligned_windows])
+    length = max([len(gene_list) for _, gene_list, _ in aligned_windows])
 
     gv = GenomeViz(fig_width=length * 1.8, track_align_type="left")
 
-    for focal_gene, gene_list in aligned_windows:
+    for focal_gene, gene_list, members in aligned_windows:
         if isinstance(focal_gene, Gene):
-            track_title = f"{focal_gene.id}\n{focal_gene.genome.name}" if isinstance(focal_gene, Gene) else focal_gene
+            track_title = f"{_track_label(members or [focal_gene])}\n{focal_gene.genome.name}"
             track = gv.add_feature_track(track_title, length * 5 - 2)
         else:
             track_title = focal_gene
             track = gv.add_feature_track(track_title, 1)
+
+        # All focal genes of a collapsed track share the focal gene color
+        focal_ids = {gene.id for gene in (members or [focal_gene]) if isinstance(gene, Gene)}
+        focal_ids |= {gene.representative.id for gene in (members or [focal_gene]) if isinstance(gene, Gene)}
 
         for idx, gene in enumerate(gene_list):
             # Default values
@@ -283,9 +427,9 @@ def _render_sog_figure(aligned_windows: list[tuple[Gene, list[Gene]]], palette: 
                 else:
                     fc = palette.get(og_label, "#888888")  # OGs that are not contribute to synteny
 
-                if gene == focal_gene.representative:
+                if gene.id in focal_ids or gene.representative.id in focal_ids:
                     text_weight = "bold"
-                    fc = "#fcfc42"  # Highlight focal gene
+                    fc = _FOCAL_COLOR  # Highlight focal gene
 
                 start = idx * 5
                 track.add_feature(
@@ -299,6 +443,23 @@ def _render_sog_figure(aligned_windows: list[tuple[Gene, list[Gene]]], palette: 
                 track.add_text(start + 1.5, og_label, vpos="bottom", hpos="center", rotation=0, weight=text_weight)
 
     gv.savefig(output_path)
+
+
+def _track_label(members: list[Gene], max_shown: int = 3) -> str:
+    """Builds the gene part of a track title.
+
+    Args:
+        members (list[Gene]): The focal genes the track represents.
+        max_shown (int): How many gene IDs to spell out before summarizing the rest.
+
+    Returns:
+        str: The gene IDs of the track, one per line, truncated when the track is collapsed
+        into more than `max_shown` focal genes.
+    """
+    gene_ids = [gene.id for gene in members]
+    if len(gene_ids) > max_shown:
+        gene_ids = gene_ids[:max_shown] + [f"(+{len(members) - max_shown} more)"]
+    return "\n".join(gene_ids)
 
 
 if __name__ == "__main__":

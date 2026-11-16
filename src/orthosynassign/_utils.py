@@ -56,6 +56,7 @@ class VisualizeArgs(_BaseArgs, Protocol):
         sog (str): The Sog identifier.
         fmt (str): The format for the visualization output.
         keep_all_genes (bool): Flag to keep all genes in the visualization output.
+        collapse (str): Mode used to collapse focal genes of the same genome into one track.
         combine (bool): Flag to combine all SOGs in a single figure.
     """
 
@@ -63,6 +64,7 @@ class VisualizeArgs(_BaseArgs, Protocol):
     sog: str
     fmt: str
     keep_all_genes: bool
+    collapse: str
     combine: bool
 
 

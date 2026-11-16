@@ -136,19 +136,19 @@ def main(args: VisualizeArgs) -> int:
             aligned_data_list.append((target_sog, collapsed_data))
 
         if args.combine and len(aligned_data_list) > 1:
-            concat_aligned_data = []
-            for idx, (target_sog, aligned_data) in enumerate(aligned_data_list):
-                concat_aligned_data.append((target_sog, "", []))
-                for focal_gene, genes, members in aligned_data:
-                    concat_aligned_data.append((focal_gene, genes, members))
+            concat_tracks: list[tuple[Gene, list[Gene], list[Gene]]] = []
+            for target_sog, tracks in aligned_data_list:
+                # A track with a str title and no genes acts as the separator between two SOGs
+                concat_tracks.append((target_sog, "", []))  # type: ignore[arg-type]
+                concat_tracks.extend(tracks)
 
-            aligned_data_list = [("combined", concat_aligned_data)]  # Use "combined" to spy the target_sog
+            aligned_data_list = [("combined", concat_tracks)]  # Use "combined" to spy the target_sog
 
-        for target_sog, aligned_data in aligned_data_list:
-            palette = _get_palette(aligned_data)
+        for target_sog, tracks in aligned_data_list:
+            palette = _get_palette(tracks)
 
             output_file_path = output_dir / f"{target_sog}.{args.fmt}"
-            _render_sog_figure(aligned_data, palette, output_file_path)
+            _render_sog_figure(tracks, palette, output_file_path)
 
             logger.info("Figure saved to %s", output_file_path)
 

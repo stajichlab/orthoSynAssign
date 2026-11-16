@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from orthosynassign.visualize import AUTHOR, VERSION, _collapse_tracks, _track_label, main, run_cli
+from orthosynassign.visualize import AUTHOR, VERSION, _collapse_tracks, _track_label, _wrap_label, main, run_cli
 
 
 @pytest.fixture
@@ -366,3 +366,29 @@ class TestTrackLabel:
     def test_truncates_long_groups(self, collapse_env):
         genome_a, _ = collapse_env
         assert _track_label(list(genome_a[0:5])) == "A0\nA1\nA2\n(+2 more)"
+
+
+# --- _wrap_label ---
+
+
+class TestWrapLabel:
+    def test_short_label_is_untouched(self):
+        assert _wrap_label("Suva_1.100") == "Suva_1.100"
+
+    def test_hyphen_break_is_untouched(self):
+        assert _wrap_label("Afu5g15090-T-p1") == "Afu5g15090-\nT-p1"
+
+    def test_single_character_leftover_is_rebalanced(self):
+        assert _wrap_label("ABCDEFGHIJKLM") == "ABCDEFGHIJK\nLM"
+
+    def test_line_count_is_preserved(self):
+        label = _wrap_label("a" * 25)
+        assert label.count("\n") == 2
+        assert len(label.split("\n")[-1]) >= 2
+
+    def test_unavoidable_stub_falls_back(self):
+        # The run before the hyphen cannot be broken further without adding a line
+        assert _wrap_label("x" * 13 + "-y") == "x" * 12 + "\nx-y"
+
+    def test_custom_min_tail(self):
+        assert _wrap_label("Afu5g15090-T-p1", min_tail=5) == "Afu5g15090\n-T-p1"

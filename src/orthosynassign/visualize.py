@@ -50,6 +50,12 @@ _T = TypeVar("Type")
 #: Color used to highlight the focal gene(s) of a track.
 _FOCAL_COLOR = "#fcfc42"
 
+#: Maximum number of characters per line of a gene label.
+_LABEL_WIDTH = 12
+
+#: Shortest last line a wrapped gene label may end with.
+_LABEL_MIN_TAIL = 2
+
 #: Available modes for --collapse.
 COLLAPSE_MODES = ("tandem", "window", "none")
 
@@ -447,13 +453,43 @@ def _render_sog_figure(
                     start,
                     start + 3,
                     plotstyle="bigrbox",
-                    label="\n".join(textwrap.wrap(gene.id, width=12)),
+                    label=_wrap_label(gene.id),
                     fc=fc,
                     text_kws={"weight": text_weight, "rotation": 0, "hpos": "center"},
                 )
                 track.add_text(start + 1.5, og_label, vpos="bottom", hpos="center", rotation=0, weight=text_weight)
 
     gv.savefig(output_path)
+
+
+def _wrap_label(text: str, width: int = _LABEL_WIDTH, min_tail: int = _LABEL_MIN_TAIL) -> str:
+    """Wraps a gene label without leaving a stub on the last line.
+
+    `textwrap.wrap` fills every line before moving on, so a label slightly longer than a
+    multiple of `width` ends in one or two leftover characters. When that happens the label is
+    re-wrapped at the widest smaller width that keeps the same number of lines and gives a
+    longer last line, which shifts the break instead of adding a line. Labels that already end
+    in a long enough line, such as those broken at a hyphen, are left untouched.
+
+    Args:
+        text (str): The label to wrap.
+        width (int): The maximum number of characters per line.
+        min_tail (int): The shortest acceptable last line.
+
+    Returns:
+        str: The label, with its lines separated by newlines.
+    """
+    lines = textwrap.wrap(text, width=width)
+    if len(lines) < 2 or len(lines[-1]) >= min_tail:
+        return "\n".join(lines) if lines else text
+
+    for candidate_width in range(width - 1, 0, -1):
+        candidate = textwrap.wrap(text, width=candidate_width)
+        if len(candidate) == len(lines) and len(candidate[-1]) >= min_tail:
+            return "\n".join(candidate)
+
+    # No narrower width helps (e.g. the text has one long unbreakable run)
+    return "\n".join(lines)
 
 
 def _track_label(members: list[Gene], max_shown: int = 3) -> str:

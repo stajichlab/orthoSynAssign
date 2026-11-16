@@ -279,8 +279,9 @@ class TestCollapseTracks:
         assert len(window) == 4
         assert members == [genome_a[2], genome_a[3], genome_a[4]]
 
-    def test_tandem_keeps_non_adjacent_focal_genes_apart(self, collapse_env):
+    def test_tandem_keeps_focal_genes_separated_by_a_plotted_gene_apart(self, collapse_env):
         genome_a, _ = collapse_env
+        # A2 is plotted between A1 and A3, so they are not drawn next to each other
         aligned = [
             (genome_a[1], [genome_a[1], genome_a[2], genome_a[3]]),
             (genome_a[3], [genome_a[1], genome_a[2], genome_a[3]]),
@@ -289,6 +290,30 @@ class TestCollapseTracks:
         result = _collapse_tracks(aligned, "tandem")
 
         assert [focal for focal, _, _ in result] == [genome_a[1], genome_a[3]]
+
+    def test_tandem_ignores_genes_left_out_of_the_figure(self, collapse_env):
+        genome_a, _ = collapse_env
+        # A2 exists in the genome but is not plotted (e.g. no orthogroup, -k off), so A1 and
+        # A3 are drawn next to each other and must collapse
+        aligned = [
+            (genome_a[1], [genome_a[0], genome_a[1], genome_a[3]]),
+            (genome_a[3], [genome_a[1], genome_a[3], genome_a[4]]),
+        ]
+
+        result = _collapse_tracks(aligned, "tandem")
+
+        assert len(result) == 1
+        assert result[0][2] == [genome_a[1], genome_a[3]]
+
+    def test_tandem_keeps_focal_genes_on_different_contigs_apart(self, gene_factory, genome_factory):
+        genome = genome_factory("A")
+        genome.add_gene(gene_factory("A0", "scaf1"))
+        genome.add_gene(gene_factory("A1", "scaf2"))
+        aligned = [(genome[0], [genome[0]]), (genome[1], [genome[1]])]
+
+        result = _collapse_tracks(aligned, "tandem")
+
+        assert [focal for focal, _, _ in result] == [genome[0], genome[1]]
 
     def test_window_collapses_overlapping_windows(self, collapse_env):
         genome_a, _ = collapse_env

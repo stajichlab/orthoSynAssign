@@ -10,7 +10,7 @@ import logging
 import sys
 import textwrap
 from collections import Counter, defaultdict
-from itertools import combinations
+from itertools import chain, combinations
 from pathlib import Path
 from typing import TypeVar, cast
 
@@ -321,7 +321,7 @@ def _group_tracks(aligned_data: list[tuple[Gene, list[Gene]]], mode: str) -> lis
     for indices in by_genome.values():
         for a, b in combinations(indices, 2):
             if mode == "tandem":
-                should_collapse = _is_tandem(aligned_data[a][0], aligned_data[b][0])
+                should_collapse = _is_tandem(aligned_data[a], aligned_data[b])
             else:
                 should_collapse = bool(_window_keys(aligned_data[a][1]) & _window_keys(aligned_data[b][1]))
             if should_collapse:
@@ -334,19 +334,30 @@ def _group_tracks(aligned_data: list[tuple[Gene, list[Gene]]], mode: str) -> lis
     return [groups[root] for root in sorted(groups)]
 
 
-def _is_tandem(gene_a: Gene, gene_b: Gene) -> bool:
-    """Reports whether two genes sit next to each other on the same contig.
+def _is_tandem(row_a: tuple[Gene, list[Gene]], row_b: tuple[Gene, list[Gene]]) -> bool:
+    """Reports whether two focal genes are drawn next to each other on the same contig.
+
+    Adjacency is judged on the genes actually plotted, not on the genome: genes that sit
+    between the two copies but are left out of the figure (for instance genes without an
+    orthogroup when `-k/--keep_all_genes` is off) do not break the tandem run.
 
     Args:
-        gene_a (Gene): The first gene.
-        gene_b (Gene): The second gene.
+        row_a (tuple[Gene, list[Gene]]): The focal gene and aligned window of the first track.
+        row_b (tuple[Gene, list[Gene]]): The focal gene and aligned window of the second track.
 
     Returns:
-        bool: True if both genes are adjacent on the same contig.
+        bool: True if no plotted gene of either window lies between the two focal genes.
     """
+    gene_a, gene_b = row_a[0], row_b[0]
     if gene_a.seqid != gene_b.seqid or gene_a.index is None or gene_b.index is None:
         return False
-    return abs(gene_a.index - gene_b.index) == 1
+
+    first, last = sorted((gene_a.index, gene_b.index))
+    if last - first == 1:
+        return True
+
+    plotted = {gene.index for gene in chain(row_a[1], row_b[1]) if gene and gene.index is not None and gene.seqid == gene_a.seqid}
+    return not any(first < index < last for index in plotted)
 
 
 def _window_keys(window: list[Gene]) -> set[tuple[str, int]]:

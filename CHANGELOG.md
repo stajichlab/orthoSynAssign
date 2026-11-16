@@ -10,7 +10,9 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - `orthosynassign-vis --collapse {tandem,window,none}` draws several focal genes of one genome as a single track.
-  `tandem` (the default) collapses focal genes that are adjacent on the same contig, `window` collapses focal genes
+  `tandem` (the default) collapses focal genes that are drawn next to each other on the same contig — adjacency is
+  judged on the plotted genes, so copies separated only by genes the figure omits (genes without an orthogroup when
+  `-k` is off) still collapse — `window` collapses focal genes
   whose plotted windows share a gene, and `none` keeps the previous one-track-per-focal-gene behaviour. The kept
   track is the one showing the most genes, its title lists the collapsed gene IDs, and every focal gene of the group
   is drawn in the focal gene color `#fcfc42`.

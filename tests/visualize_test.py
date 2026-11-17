@@ -11,6 +11,8 @@ import pytest
 from orthosynassign.visualize import (
     AUTHOR,
     VERSION,
+    Track,
+    _build_tracks,
     _collapse_tracks,
     _track_label,
     _trim_empty_columns,
@@ -450,3 +452,49 @@ class TestTrimEmptyColumns:
             [genome_b[0], genome_b[1]],
             [genome_a[4], genome_a[5]],
         ]
+
+
+# --- _build_tracks ---
+
+
+class TestBuildTracks:
+    def test_track_holds_title_window_and_focal_ids(self, collapse_env):
+        genome_a, _ = collapse_env
+        aligned = [(genome_a[2], [genome_a[1], genome_a[2], genome_a[3]])]
+
+        (track,) = _build_tracks(aligned, "tandem")
+
+        assert track.title == "A2\nA"
+        assert track.genes == [genome_a[1], genome_a[2], genome_a[3]]
+        assert track.focal_ids == frozenset({"A2"})
+        assert not track.is_separator
+
+    def test_collapsed_track_lists_every_focal_gene(self, collapse_env):
+        genome_a, _ = collapse_env
+        aligned = [
+            (genome_a[2], [genome_a[1], genome_a[2], genome_a[3]]),
+            (genome_a[3], [genome_a[2], genome_a[3], None]),
+        ]
+
+        (track,) = _build_tracks(aligned, "tandem")
+
+        assert track.title == "A2\nA3\nA"
+        assert track.focal_ids == frozenset({"A2", "A3"})
+
+    def test_focal_ids_include_represented_genes(self, collapse_env, gene_factory):
+        genome_a, _ = collapse_env
+        # A tandem in-paralog folded into A2 upstream must be highlighted as well
+        genome_a[1].representative = genome_a[2]
+        aligned = [(genome_a[2], [genome_a[1], genome_a[2]])]
+
+        (track,) = _build_tracks(aligned, "none")
+
+        assert genome_a[1].id not in track.focal_ids
+        assert genome_a[1].representative.id in track.focal_ids
+
+    def test_separator_track(self):
+        track = Track(title="SOG000001.OG0000001")
+
+        assert track.is_separator
+        assert track.genes == []
+        assert track.focal_ids == frozenset()

@@ -10,6 +10,7 @@ import logging
 import sys
 import textwrap
 from collections import Counter, defaultdict
+from dataclasses import dataclass, field
 from itertools import chain, combinations
 from pathlib import Path
 from typing import TypeVar, cast
@@ -58,6 +59,35 @@ _LABEL_MIN_TAIL = 2
 
 #: Available modes for --collapse.
 COLLAPSE_MODES = ("tandem", "window", "none")
+
+
+@dataclass(frozen=True)
+class Track:
+    """One row of a figure, fully shaped and ready to draw.
+
+    Every decision taken from the command line options (`-k/--keep_all_genes`, `--collapse`)
+    is resolved while the tracks are built, so rendering only has to walk the genes.
+
+    Attributes:
+        title (str): The text drawn to the left of the track.
+        genes (list[Gene | None]): The genes of the aligned window, `None` where the track has
+            no gene in that column.
+        focal_ids (frozenset[str]): The IDs of the focal genes the track stands for, including
+            the genes they represent. These are highlighted with the focal gene color.
+    """
+
+    title: str
+    genes: list[Gene | None] = field(default_factory=list)
+    focal_ids: frozenset[str] = frozenset()
+
+    @property
+    def is_separator(self) -> bool:
+        """Reports whether the track is an empty spacer between two SOGs.
+
+        Returns:
+            bool: True if the track holds no gene.
+        """
+        return not self.genes
 
 
 def run_cli() -> None:
@@ -111,7 +141,7 @@ def main(args: VisualizeArgs) -> int:
 
         ColorCycler.set_cmap("tab20b")
         # Generate figures for each target_sog
-        aligned_data_list: list[tuple[str, list[tuple[Gene, list[Gene], list[Gene]]]]] = []
+        tracks_per_sog: list[tuple[str, list[Track]]] = []
         for target_sog in args.sog:
             if target_sog not in sogs_mapper:
                 logger.warning("SOG %s not found in orthogroups.", target_sog)
@@ -130,27 +160,27 @@ def main(args: VisualizeArgs) -> int:
                 )
                 for (genome_idx, focal_gene_idx), genes in aligned_data_idx
             ]
-            collapsed_data = _collapse_tracks(aligned_data, args.collapse)
-            if len(collapsed_data) < len(aligned_data):
+            tracks = _build_tracks(aligned_data, args.collapse)
+            if len(tracks) < len(aligned_data):
                 logger.info(
                     "%s: collapsed %d focal genes into %d tracks (--collapse %s)",
                     target_sog,
                     len(aligned_data),
-                    len(collapsed_data),
+                    len(tracks),
                     args.collapse,
                 )
-            aligned_data_list.append((target_sog, collapsed_data))
+            tracks_per_sog.append((target_sog, tracks))
 
-        if args.combine and len(aligned_data_list) > 1:
-            concat_tracks: list[tuple[Gene, list[Gene], list[Gene]]] = []
-            for target_sog, tracks in aligned_data_list:
-                # A track with a str title and no genes acts as the separator between two SOGs
-                concat_tracks.append((target_sog, "", []))  # type: ignore[arg-type]
+        if args.combine and len(tracks_per_sog) > 1:
+            concat_tracks: list[Track] = []
+            for target_sog, tracks in tracks_per_sog:
+                # A track without genes acts as the separator between two SOGs
+                concat_tracks.append(Track(title=target_sog))
                 concat_tracks.extend(tracks)
 
-            aligned_data_list = [("combined", concat_tracks)]  # Use "combined" to spy the target_sog
+            tracks_per_sog = [("combined", concat_tracks)]  # Use "combined" to spy the target_sog
 
-        for target_sog, tracks in aligned_data_list:
+        for target_sog, tracks in tracks_per_sog:
             palette = _get_palette(tracks)
 
             output_file_path = output_dir / f"{target_sog}.{args.fmt}"
@@ -258,6 +288,31 @@ def _parse_arguments(argv=None) -> VisualizeArgs:
     opt_args.add_argument("-h", "--help", action="help", help="show this help message and exit")
 
     return cast(VisualizeArgs, parser.parse_args(argv))
+
+
+def _build_tracks(aligned_data: list[tuple[Gene, list[Gene]]], mode: str = "tandem") -> list[Track]:
+    """Shapes the aligned windows of a SOG into the tracks to draw.
+
+    Args:
+        aligned_data (list[tuple[Gene, list[Gene]]]): Focal genes and their aligned windows.
+        mode (str): The `--collapse` mode.
+
+    Returns:
+        list[Track]: One track per figure row.
+    """
+    tracks = []
+    for focal_gene, window, members in _collapse_tracks(aligned_data, mode):
+        # A member may stand for tandem in-paralogs of its own, which are focal genes as well
+        focal_ids = {gene.id for gene in members} | {gene.representative.id for gene in members}
+        tracks.append(
+            Track(
+                title=f"{_track_label(members)}\n{focal_gene.genome.name}",
+                genes=window,
+                focal_ids=frozenset(focal_ids),
+            )
+        )
+
+    return tracks
 
 
 def _collapse_tracks(
@@ -410,19 +465,19 @@ def _window_keys(window: list[Gene]) -> set[tuple[str, int]]:
     return {(gene.seqid, gene.index) for gene in window if gene and gene.index is not None}
 
 
-def _get_palette(aligned_data: list[tuple[Gene, list[Gene], list[Gene]]]) -> dict[str, str]:
+def _get_palette(tracks: list[Track]) -> dict[str, str]:
     """Prepares color palette for a SOG.
 
     Args:
-        aligned_data (dict[Gene, list[Gene]]): A tuple containing a dictionary of aligned data of a SOG.
+        tracks (list[Track]): The tracks of the figure.
 
     Returns:
         dict[str, str]: A color palette for this SOG.
     """
     # Count OG occurrences to determine coloring
     og_counter = Counter()
-    for _, win, _ in aligned_data:
-        for gene in win:
+    for track in tracks:
+        for gene in track.genes:
             if gene and gene.og:
                 og_counter[gene.og.id] += 1
 
@@ -433,14 +488,11 @@ def _get_palette(aligned_data: list[tuple[Gene, list[Gene], list[Gene]]]) -> dic
     return palette
 
 
-def _render_sog_figure(
-    aligned_windows: list[tuple[Gene, list[Gene], list[Gene]]], palette: dict[str, str], output_path: Path
-) -> None:
+def _render_sog_figure(tracks: list[Track], palette: dict[str, str], output_path: Path) -> None:
     """Renders the GenomeViz object and saves the file.
 
     Args:
-        aligned_windows (list[tuple[Gene, list[Gene], list[Gene]]]): The focal gene, its aligned
-            window and the focal genes the track represents (more than one when collapsed).
+        tracks (list[Track]): The tracks of the figure, already shaped by `_build_tracks`.
         palette (dict[str, str]): A color palette for the SOG.
         output_path (Path): The path where the rendered figure should be saved.
 
@@ -448,48 +500,43 @@ def _render_sog_figure(
         None
     """
     # Get length from the longest track
-    length = max([len(gene_list) for _, gene_list, _ in aligned_windows])
+    length = max(len(track.genes) for track in tracks)
 
     gv = GenomeViz(fig_width=length * 1.8, track_align_type="left")
 
-    for focal_gene, gene_list, members in aligned_windows:
-        if isinstance(focal_gene, Gene):
-            track_title = f"{_track_label(members or [focal_gene])}\n{focal_gene.genome.name}"
-            track = gv.add_feature_track(track_title, length * 5 - 2)
-        else:
-            track_title = focal_gene
-            track = gv.add_feature_track(track_title, 1)
+    for track in tracks:
+        if track.is_separator:
+            gv.add_feature_track(track.title, 1)
+            continue
 
-        # All focal genes of a collapsed track share the focal gene color
-        focal_ids = {gene.id for gene in (members or [focal_gene]) if isinstance(gene, Gene)}
-        focal_ids |= {gene.representative.id for gene in (members or [focal_gene]) if isinstance(gene, Gene)}
+        feature_track = gv.add_feature_track(track.title, length * 5 - 2)
 
-        for idx, gene in enumerate(gene_list):
-            # Default values
-            og_label = "None"
-            text_weight = "normal"
+        for idx, gene in enumerate(track.genes):
+            if not gene:
+                continue
 
-            if gene:
-                og_label = getattr(getattr(gene, "og", None), "id", "None")
-                if og_label == "None":
-                    fc = "#dddddd"  # Default for genes without OGs
-                else:
-                    fc = palette.get(og_label, "#888888")  # OGs that are not contribute to synteny
+            og_label = gene.og.id if gene.og else "None"
+            if og_label == "None":
+                fc = "#dddddd"  # Default for genes without OGs
+            else:
+                fc = palette.get(og_label, "#888888")  # OGs that are not contribute to synteny
 
-                if gene.id in focal_ids or gene.representative.id in focal_ids:
-                    text_weight = "bold"
-                    fc = _FOCAL_COLOR  # Highlight focal gene
+            # All focal genes of a collapsed track share the focal gene color
+            is_focal = gene.id in track.focal_ids or gene.representative.id in track.focal_ids
+            text_weight = "bold" if is_focal else "normal"
+            if is_focal:
+                fc = _FOCAL_COLOR
 
-                start = idx * 5
-                track.add_feature(
-                    start,
-                    start + 3,
-                    plotstyle="bigrbox",
-                    label=_wrap_label(gene.id),
-                    fc=fc,
-                    text_kws={"weight": text_weight, "rotation": 0, "hpos": "center"},
-                )
-                track.add_text(start + 1.5, og_label, vpos="bottom", hpos="center", rotation=0, weight=text_weight)
+            start = idx * 5
+            feature_track.add_feature(
+                start,
+                start + 3,
+                plotstyle="bigrbox",
+                label=_wrap_label(gene.id),
+                fc=fc,
+                text_kws={"weight": text_weight, "rotation": 0, "hpos": "center"},
+            )
+            feature_track.add_text(start + 1.5, og_label, vpos="bottom", hpos="center", rotation=0, weight=text_weight)
 
     gv.savefig(output_path)
 

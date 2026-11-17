@@ -281,7 +281,7 @@ def _collapse_tracks(
         raise ValueError(f"Unknown collapse mode: {mode}. Choose from {', '.join(COLLAPSE_MODES)}.")
 
     if mode == "none" or len(aligned_data) < 2:
-        return [(focal_gene, window, [focal_gene]) for focal_gene, window in aligned_data]
+        return _trim_empty_columns([(focal_gene, window, [focal_gene]) for focal_gene, window in aligned_data])
 
     collapsed: list[tuple[Gene, list[Gene], list[Gene]]] = []
     for group in _group_tracks(aligned_data, mode):
@@ -290,7 +290,39 @@ def _collapse_tracks(
         members = [aligned_data[idx][0] for idx in group]
         collapsed.append((aligned_data[kept][0], aligned_data[kept][1], members))
 
-    return collapsed
+    return _trim_empty_columns(collapsed)
+
+
+def _trim_empty_columns(
+    tracks: list[tuple[Gene, list[Gene], list[Gene]]],
+) -> list[tuple[Gene, list[Gene], list[Gene]]]:
+    """Drops the aligned columns that hold no gene in any of the kept tracks.
+
+    The windows are padded to a common length and aligned on their focal gene before
+    collapsing, so the padding also covers the tracks that collapsing then removes. Those
+    columns would be drawn as blank space in front of (or behind) every remaining track.
+    Dropping a column from every track at once keeps the tracks aligned.
+
+    Args:
+        tracks (list[tuple[Gene, list[Gene], list[Gene]]]): The kept tracks.
+
+    Returns:
+        list[tuple[Gene, list[Gene], list[Gene]]]: The tracks without their empty columns.
+    """
+    if not tracks:
+        return tracks
+
+    n_columns = max(len(window) for _, window, _ in tracks)
+    kept_columns = [
+        column for column in range(n_columns) if any(column < len(window) and window[column] for _, window, _ in tracks)
+    ]
+    if len(kept_columns) == n_columns:
+        return tracks
+
+    return [
+        (focal_gene, [window[column] if column < len(window) else None for column in kept_columns], members)
+        for focal_gene, window, members in tracks
+    ]
 
 
 def _group_tracks(aligned_data: list[tuple[Gene, list[Gene]]], mode: str) -> list[list[int]]:

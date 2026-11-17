@@ -8,7 +8,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from orthosynassign.visualize import AUTHOR, VERSION, _collapse_tracks, _track_label, _wrap_label, main, run_cli
+from orthosynassign.visualize import (
+    AUTHOR,
+    VERSION,
+    _collapse_tracks,
+    _track_label,
+    _trim_empty_columns,
+    _wrap_label,
+    main,
+    run_cli,
+)
 
 
 @pytest.fixture
@@ -392,3 +401,52 @@ class TestWrapLabel:
 
     def test_custom_min_tail(self):
         assert _wrap_label("Afu5g15090-T-p1", min_tail=5) == "Afu5g15090\n-T-p1"
+
+
+# --- _trim_empty_columns ---
+
+
+class TestTrimEmptyColumns:
+    def test_leading_padding_left_by_collapsing_is_dropped(self, collapse_env):
+        genome_a, genome_b = collapse_env
+        # Both tracks keep two empty columns in front, left over from a dropped track
+        tracks = [
+            (genome_a[0], [None, None, genome_a[0], genome_a[1]], [genome_a[0]]),
+            (genome_b[0], [None, None, genome_b[0], genome_b[1]], [genome_b[0]]),
+        ]
+
+        result = _trim_empty_columns(tracks)
+
+        assert [window for _, window, _ in result] == [
+            [genome_a[0], genome_a[1]],
+            [genome_b[0], genome_b[1]],
+        ]
+
+    def test_column_used_by_one_track_is_kept(self, collapse_env):
+        genome_a, genome_b = collapse_env
+        tracks = [
+            (genome_a[0], [None, genome_a[0]], [genome_a[0]]),
+            (genome_b[0], [genome_b[0], genome_b[1]], [genome_b[0]]),
+        ]
+
+        result = _trim_empty_columns(tracks)
+
+        assert result == tracks
+
+    def test_collapse_drops_the_padding_of_removed_tracks(self, collapse_env):
+        genome_a, genome_b = collapse_env
+        # The A5 track carries the widest prefix, so every window was padded in front for it.
+        # Collapsing A4 and A5 removes that track, and its padding must go with it.
+        aligned = [
+            (genome_b[0], [None, genome_b[0], genome_b[1]]),
+            (genome_a[4], [None, genome_a[4], genome_a[5]]),
+            (genome_a[5], [genome_a[4], genome_a[5], None]),
+        ]
+
+        result = _collapse_tracks(aligned, "tandem")
+
+        assert len(result) == 2
+        assert [window for _, window, _ in result] == [
+            [genome_b[0], genome_b[1]],
+            [genome_a[4], genome_a[5]],
+        ]

@@ -55,6 +55,8 @@ A SOG can hold several focal genes from the same genome, for instance a run of t
 | :--- | :--- |
 | `tandem` (default) | Focal genes of the same genome that are drawn next to each other on the same contig are drawn as one track. Adjacency is judged on the genes actually plotted, so copies separated only by genes that the figure leaves out (genes without an orthogroup when `-k/--keep_all_genes` is off) still count as tandem. |
 | `window` | Focal genes of the same genome whose plotted windows share at least one gene are drawn as one track. This is broader than `tandem` and also merges copies separated by a few genes. |
+
+A track is only merged into another when the kept window actually shows its focal gene, so no focal gene disappears from the figure. A long chain of overlapping windows is therefore split into as few tracks as are needed to show every copy.
 | `none` | No collapsing: one track per focal gene, as in v1.4.0 and earlier. |
 
 Collapsing is transitive, so a run of three tandem copies becomes a single track. The kept track is the one whose window shows the most genes, its title lists the collapsed gene IDs (truncated to three plus a count), and every focal gene of the group is drawn in the focal gene color `#fcfc42`.

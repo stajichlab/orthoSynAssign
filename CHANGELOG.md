@@ -9,6 +9,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `orthosynassign-vis` marks the end of a contig with a dark bar beside the first or last gene of a track, so a
+  flank cut short by the contig can be told from one cut short by `--window`. Circular genomes never get the mark.
 - `orthosynassign-vis --collapse {tandem,window,none}` draws several focal genes of one genome as a single track.
   `tandem` (the default) collapses focal genes that are drawn next to each other on the same contig — adjacency is
   judged on the plotted genes, so copies separated only by genes the figure omits (genes without an orthogroup when

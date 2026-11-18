@@ -47,6 +47,12 @@ orthosynassign-vis --og_file orthogroups.tsv --sog_file Refined_SOGs.tsv --bed *
 `--window` should match the `-w/--window` value used in the original `orthosynassign` run being visualized, so that the plotted genomic context matches the window that was actually used for synteny support during partitioning.
 :::
 
+### Contig ends
+
+A window stops either because `--window` is used up or because the contig ends, and both look the same in a figure. A dark bar is therefore drawn beside the first or the last gene of a track when that gene is the first or the last gene of its contig, so a short flank can be told from a truncated one. Circular genomes have no end and never get the mark.
+
+---
+
 ### Collapsing focal genes
 
 A SOG can hold several focal genes from the same genome, for instance a run of tandem copies. Each of them is drawn as its own track by default, which repeats nearly the same genomic context many times. `--collapse` merges such tracks:

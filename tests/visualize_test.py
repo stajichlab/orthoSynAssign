@@ -15,6 +15,7 @@ from orthosynassign.visualize import (
     _align_tracks,
     _build_tracks,
     _collapse_tracks,
+    _contig_edges,
     _merge_windows,
     _track_label,
     _wrap_label,
@@ -517,3 +518,69 @@ class TestBuildTracks:
         assert track.is_separator
         assert track.genes == []
         assert track.focal_ids == frozenset()
+
+
+# --- contig ends ---
+
+
+class TestContigEdges:
+    def test_window_in_the_middle_of_a_contig(self, collapse_env):
+        genome_a, _ = collapse_env
+        assert _contig_edges([genome_a[1], genome_a[2]]) == (False, False)
+
+    def test_window_reaching_the_first_gene_of_a_contig(self, collapse_env):
+        genome_a, _ = collapse_env
+        assert _contig_edges([genome_a[0], genome_a[1]]) == (True, False)
+
+    def test_window_reaching_the_last_gene_of_a_contig(self, collapse_env):
+        genome_a, _ = collapse_env
+        assert _contig_edges([genome_a[4], genome_a[5]]) == (False, True)
+
+    def test_padding_is_ignored(self, collapse_env):
+        genome_a, _ = collapse_env
+        assert _contig_edges([None, genome_a[0], genome_a[1], None]) == (True, False)
+
+    def test_next_contig_counts_as_an_end(self, gene_factory, genome_factory):
+        genome = genome_factory("A")
+        genome.add_gene(gene_factory("A0", "scaf1"))
+        genome.add_gene(gene_factory("A1", "scaf2"))
+
+        assert _contig_edges([genome[0]]) == (True, True)
+        assert _contig_edges([genome[1]]) == (True, True)
+
+    def test_circular_genome_has_no_end(self, gene_factory, genome_factory):
+        genome = genome_factory("A", is_circular=True)
+        for i in range(3):
+            genome.add_gene(gene_factory(f"A{i}", "scaf1"))
+
+        assert _contig_edges([genome[0], genome[1]]) == (False, False)
+
+    def test_empty_window(self):
+        assert _contig_edges([None, None]) == (False, False)
+
+
+class TestContigEndMargins:
+    def test_margin_column_is_added_where_a_mark_is_drawn(self, collapse_env):
+        genome_a, genome_b = collapse_env
+        # The A window stops at the last gene of its contig, the B window does not
+        aligned = [
+            (genome_a[4], [genome_a[4], genome_a[5]]),
+            (genome_b[0], [genome_b[0], genome_b[1]]),
+        ]
+
+        tracks = _build_tracks(aligned, "none")
+
+        assert [track.at_contig_end for track in tracks] == [True, True]
+        assert [track.at_contig_start for track in tracks] == [False, True]
+        # One column on each side, since both a start and an end are marked
+        assert all(len(track.genes) == 4 for track in tracks)
+        assert all(track.genes[0] is None and track.genes[-1] is None for track in tracks)
+
+    def test_no_margin_without_a_mark(self, collapse_env):
+        genome_a, _ = collapse_env
+        aligned = [(genome_a[1], [genome_a[1], genome_a[2]]), (genome_a[3], [genome_a[3], genome_a[4]])]
+
+        tracks = _build_tracks(aligned, "none")
+
+        assert [(track.at_contig_start, track.at_contig_end) for track in tracks] == [(False, False), (False, False)]
+        assert all(len(track.genes) == 2 for track in tracks)

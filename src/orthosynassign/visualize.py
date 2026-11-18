@@ -57,6 +57,9 @@ _LABEL_WIDTH = 12
 #: Shortest last line a wrapped gene label may end with.
 _LABEL_MIN_TAIL = 2
 
+#: Color of the bar that marks the end of a contig.
+_CONTIG_END_COLOR = "#444444"
+
 #: Available modes for --collapse.
 COLLAPSE_MODES = ("tandem", "window", "none")
 
@@ -74,11 +77,16 @@ class Track:
             no gene in that column.
         focal_ids (frozenset[str]): The IDs of the focal genes the track stands for, including
             the genes they represent. These are highlighted with the focal gene color.
+        at_contig_start (bool): The first gene of the track is the first gene of its contig, so
+            the window is cut short by the contig and not by the window size.
+        at_contig_end (bool): The last gene of the track is the last gene of its contig.
     """
 
     title: str
     genes: list[Gene | None] = field(default_factory=list)
     focal_ids: frozenset[str] = frozenset()
+    at_contig_start: bool = False
+    at_contig_end: bool = False
 
     @property
     def is_separator(self) -> bool:
@@ -300,19 +308,68 @@ def _build_tracks(aligned_data: list[tuple[Gene, list[Gene]]], mode: str = "tand
     Returns:
         list[Track]: One track per figure row.
     """
+    rows = _collapse_tracks(aligned_data, mode)
+    edges = [_contig_edges(window) for _, window, _ in rows]
+
+    # The marks are drawn beside the first and last gene, which needs a column to live in
+    left_margin = [None] if any(at_start for at_start, _ in edges) else []
+    right_margin = [None] if any(at_end for _, at_end in edges) else []
+
     tracks = []
-    for focal_gene, window, members in _collapse_tracks(aligned_data, mode):
+    for (focal_gene, window, members), (at_start, at_end) in zip(rows, edges):
         # A member may stand for tandem in-paralogs of its own, which are focal genes as well
         focal_ids = {gene.id for gene in members} | {gene.representative.id for gene in members}
         tracks.append(
             Track(
                 title=f"{_track_label(members)}\n{focal_gene.genome.name}",
-                genes=window,
+                genes=left_margin + window + right_margin,
                 focal_ids=frozenset(focal_ids),
+                at_contig_start=at_start,
+                at_contig_end=at_end,
             )
         )
 
     return tracks
+
+
+def _contig_edges(window: list[Gene]) -> tuple[bool, bool]:
+    """Reports whether a window reaches the start or the end of its contig.
+
+    A window stops either because the window size is used up or because the contig ends, and
+    the figure would look the same in both cases. The engine does not report which of the two
+    happened, but the genes of a contig are consecutive in the genome, so the neighbours of
+    the first and the last gene of the window answer it. A circular genome has no end.
+
+    Args:
+        window (list[Gene]): The genes of the window, padding included.
+
+    Returns:
+        tuple[bool, bool]: Whether the window starts at the first gene of its contig and
+        whether it stops at the last one.
+    """
+    genes = [gene for gene in window if gene]
+    if not genes or genes[0].genome is None or genes[0].genome.is_circular:
+        return (False, False)
+
+    return (_at_contig_edge(genes[0], -1), _at_contig_edge(genes[-1], 1))
+
+
+def _at_contig_edge(gene: Gene, step: int) -> bool:
+    """Reports whether a gene is the first or the last gene of its contig.
+
+    Args:
+        gene (Gene): The gene to test.
+        step (int): -1 to test the start of the contig, 1 to test its end.
+
+    Returns:
+        bool: True if the genome holds no gene of the same contig on that side.
+    """
+    genome = gene.genome
+    neighbour = gene.index + step
+    if neighbour < 0 or neighbour >= len(genome):
+        return True
+
+    return genome[neighbour].seqid != gene.seqid
 
 
 def _collapse_tracks(
@@ -613,6 +670,7 @@ def _render_sog_figure(tracks: list[Track], palette: dict[str, str], output_path
             continue
 
         feature_track = gv.add_feature_track(track.title, length * 5 - 2)
+        _mark_contig_ends(feature_track, track)
 
         for idx, gene in enumerate(track.genes):
             if not gene:
@@ -642,6 +700,30 @@ def _render_sog_figure(tracks: list[Track], palette: dict[str, str], output_path
             feature_track.add_text(start + 1.5, og_label, vpos="bottom", hpos="center", rotation=0, weight=text_weight)
 
     gv.savefig(output_path)
+
+
+def _mark_contig_ends(feature_track, track: Track) -> None:
+    """Draws a bar where the window of a track is cut short by the end of its contig.
+
+    Args:
+        feature_track (FeatureTrack): The track being drawn.
+        track (Track): The track to read the contig edges from.
+
+    Returns:
+        None
+    """
+    columns = [idx for idx, gene in enumerate(track.genes) if gene]
+    if not columns:
+        return
+
+    # The margin column reserved by _build_tracks holds the bar
+    if track.at_contig_start:
+        start = columns[0] * 5 - 2
+        feature_track.add_feature(start, start + 1, plotstyle="bigbox", fc=_CONTIG_END_COLOR)
+
+    if track.at_contig_end:
+        start = columns[-1] * 5 + 4
+        feature_track.add_feature(start, start + 1, plotstyle="bigbox", fc=_CONTIG_END_COLOR)
 
 
 def _wrap_label(text: str, width: int = _LABEL_WIDTH, min_tail: int = _LABEL_MIN_TAIL) -> str:

@@ -338,14 +338,69 @@ def _collapse_tracks(
     if mode == "none" or len(aligned_data) < 2:
         return _trim_empty_columns([(focal_gene, window, [focal_gene]) for focal_gene, window in aligned_data])
 
-    collapsed: list[tuple[Gene, list[Gene], list[Gene]]] = []
+    covers: list[tuple[int, list[int]]] = []
     for group in _group_tracks(aligned_data, mode):
-        # Keep the window that shows the most genes, so the collapsed copies stay visible.
-        kept = max(group, key=lambda idx: (sum(1 for gene in aligned_data[idx][1] if gene), -idx))
-        members = [aligned_data[idx][0] for idx in group]
-        collapsed.append((aligned_data[kept][0], aligned_data[kept][1], members))
+        covers.extend(_split_group(group, aligned_data))
+
+    # Keep the tracks in the order the engine reports them, that is by genome and gene index
+    collapsed = [
+        (aligned_data[kept][0], aligned_data[kept][1], [aligned_data[idx][0] for idx in members])
+        for kept, members in sorted(covers)
+    ]
 
     return _trim_empty_columns(collapsed)
+
+
+def _split_group(group: list[int], aligned_data: list[tuple[Gene, list[Gene]]]) -> list[tuple[int, list[int]]]:
+    """Splits a group into as few tracks as possible without hiding a focal gene.
+
+    Grouping is transitive, so a chain of overlapping windows can reach much further than any
+    single window: the focal genes at one end of the chain are then missing from the window
+    kept for the other end, and would not be drawn at all. The group is therefore covered
+    greedily, taking the window that shows the most focal genes still to be placed, until
+    every focal gene of the group is shown by the track it was merged into.
+
+    Args:
+        group (list[int]): The track indices to cover.
+        aligned_data (list[tuple[Gene, list[Gene]]]): Focal genes and their aligned windows.
+
+    Returns:
+        list[tuple[int, list[int]]]: The kept track and the track indices it stands for, one
+        entry per track the group is split into.
+    """
+    remaining = sorted(group)
+    covers: list[tuple[int, list[int]]] = []
+
+    while remaining:
+        # A window always holds its own focal gene, so every round places at least one track
+        kept = max(
+            remaining,
+            key=lambda idx: (
+                len(_covered_by(idx, remaining, aligned_data)),
+                sum(1 for gene in aligned_data[idx][1] if gene),
+                -idx,
+            ),
+        )
+        members = _covered_by(kept, remaining, aligned_data)
+        covers.append((kept, members))
+        remaining = [idx for idx in remaining if idx not in members]
+
+    return covers
+
+
+def _covered_by(kept: int, candidates: list[int], aligned_data: list[tuple[Gene, list[Gene]]]) -> list[int]:
+    """Collects the tracks whose focal gene is shown by the window of another track.
+
+    Args:
+        kept (int): The index of the track that would be kept.
+        candidates (list[int]): The track indices to test.
+        aligned_data (list[tuple[Gene, list[Gene]]]): Focal genes and their aligned windows.
+
+    Returns:
+        list[int]: The indices of the tracks the kept window can stand for.
+    """
+    shown = _window_keys(aligned_data[kept][1])
+    return [idx for idx in candidates if (aligned_data[idx][0].seqid, aligned_data[idx][0].index) in shown]
 
 
 def _trim_empty_columns(

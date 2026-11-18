@@ -14,8 +14,9 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   judged on the plotted genes, so copies separated only by genes the figure omits (genes without an orthogroup when
   `-k` is off) still collapse — `window` collapses focal genes
   whose plotted windows share a gene, and `none` keeps the previous one-track-per-focal-gene behaviour. The kept
-  track is the one showing the most genes, its title lists the collapsed gene IDs, and every focal gene of the group
-  is drawn in the focal gene color `#fcfc42`. Aligned columns that hold no gene in any kept track are dropped, so
+  track is the one showing the most focal genes, its title lists the collapsed gene IDs, and every focal gene of the
+  group is drawn in the focal gene color `#fcfc42`. A track is only merged into another when the kept window shows its
+  focal gene, so no focal gene disappears from the figure. Aligned columns that hold no gene in any kept track are dropped, so
   collapsing does not leave the padding of the removed tracks as blank space in the figure.
 
 ### Changed

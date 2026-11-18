@@ -328,16 +328,31 @@ class TestCollapseTracks:
 
     def test_window_collapses_overlapping_windows(self, collapse_env):
         genome_a, _ = collapse_env
-        # A1 and A3 are not adjacent, but their windows share A2
+        # A1 and A3 are not adjacent, but their windows overlap and show each other
         aligned = [
-            (genome_a[1], [genome_a[1], genome_a[2]]),
-            (genome_a[3], [genome_a[2], genome_a[3]]),
+            (genome_a[1], [genome_a[1], genome_a[2], genome_a[3]]),
+            (genome_a[3], [genome_a[1], genome_a[2], genome_a[3]]),
         ]
 
         result = _collapse_tracks(aligned, "window")
 
         assert len(result) == 1
         assert result[0][2] == [genome_a[1], genome_a[3]]
+
+    def test_window_keeps_a_track_whose_focal_gene_is_not_shown(self, collapse_env):
+        genome_a, _ = collapse_env
+        # A0 and A4 only overlap through A2, so neither window shows the other focal gene and
+        # merging them would drop one from the figure
+        aligned = [
+            (genome_a[0], [genome_a[0], genome_a[1], genome_a[2]]),
+            (genome_a[2], [genome_a[1], genome_a[2], genome_a[3]]),
+            (genome_a[4], [genome_a[2], genome_a[3], genome_a[4]]),
+        ]
+
+        result = _collapse_tracks(aligned, "window")
+
+        assert [focal.id for focal, _, _ in result] == ["A0", "A4"]
+        assert [[gene.id for gene in members] for _, _, members in result] == [["A0", "A2"], ["A4"]]
 
     def test_window_keeps_disjoint_windows_apart(self, collapse_env):
         genome_a, _ = collapse_env

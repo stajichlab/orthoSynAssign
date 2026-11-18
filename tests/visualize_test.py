@@ -12,10 +12,11 @@ from orthosynassign.visualize import (
     AUTHOR,
     VERSION,
     Track,
+    _align_tracks,
     _build_tracks,
     _collapse_tracks,
+    _merge_windows,
     _track_label,
-    _trim_empty_columns,
     _wrap_label,
     main,
     run_cli,
@@ -420,53 +421,56 @@ class TestWrapLabel:
         assert _wrap_label("Afu5g15090-T-p1", min_tail=5) == "Afu5g15090\n-T-p1"
 
 
-# --- _trim_empty_columns ---
+# --- _merge_windows and _align_tracks ---
 
 
-class TestTrimEmptyColumns:
-    def test_leading_padding_left_by_collapsing_is_dropped(self, collapse_env):
-        genome_a, genome_b = collapse_env
-        # Both tracks keep two empty columns in front, left over from a dropped track
-        tracks = [
-            (genome_a[0], [None, None, genome_a[0], genome_a[1]], [genome_a[0]]),
-            (genome_b[0], [None, None, genome_b[0], genome_b[1]], [genome_b[0]]),
+class TestMergeWindows:
+    def test_single_window_is_unchanged(self, collapse_env):
+        genome_a, _ = collapse_env
+        assert _merge_windows([[None, genome_a[1], genome_a[2]]]) == [genome_a[1], genome_a[2]]
+
+    def test_merged_window_keeps_the_genes_of_every_member(self, collapse_env):
+        genome_a, _ = collapse_env
+        windows = [
+            [genome_a[0], genome_a[1], genome_a[2], genome_a[3]],
+            [genome_a[2], genome_a[3], genome_a[4], genome_a[5]],
         ]
 
-        result = _trim_empty_columns(tracks)
+        assert _merge_windows(windows) == list(genome_a[0:6])
 
-        assert [window for _, window, _ in result] == [
-            [genome_a[0], genome_a[1]],
-            [genome_b[0], genome_b[1]],
-        ]
+    def test_contained_window_adds_nothing(self, collapse_env):
+        genome_a, _ = collapse_env
+        windows = [list(genome_a[0:4]), [genome_a[1], genome_a[2]]]
 
-    def test_column_used_by_one_track_is_kept(self, collapse_env):
+        assert _merge_windows(windows) == list(genome_a[0:4])
+
+
+class TestAlignTracks:
+    def test_tracks_are_padded_onto_their_first_focal_gene(self, collapse_env):
         genome_a, genome_b = collapse_env
         tracks = [
-            (genome_a[0], [None, genome_a[0]], [genome_a[0]]),
+            (genome_a[2], list(genome_a[0:4]), [genome_a[2]]),
+            (genome_b[1], [genome_b[0], genome_b[1]], [genome_b[1]]),
+        ]
+
+        result = _align_tracks(tracks)
+
+        # Focal genes A2 and B1 line up in column 2, and both windows end at column 4
+        assert [window[2] for _, window, _ in result] == [genome_a[2], genome_b[1]]
+        assert [len(window) for _, window, _ in result] == [4, 4]
+        assert result[1][1] == [None, genome_b[0], genome_b[1], None]
+
+    def test_no_column_is_empty_in_every_track(self, collapse_env):
+        genome_a, genome_b = collapse_env
+        tracks = [
+            (genome_a[1], [genome_a[1], genome_a[2]], [genome_a[1]]),
             (genome_b[0], [genome_b[0], genome_b[1]], [genome_b[0]]),
         ]
 
-        result = _trim_empty_columns(tracks)
+        result = _align_tracks(tracks)
 
-        assert result == tracks
-
-    def test_collapse_drops_the_padding_of_removed_tracks(self, collapse_env):
-        genome_a, genome_b = collapse_env
-        # The A5 track carries the widest prefix, so every window was padded in front for it.
-        # Collapsing A4 and A5 removes that track, and its padding must go with it.
-        aligned = [
-            (genome_b[0], [None, genome_b[0], genome_b[1]]),
-            (genome_a[4], [None, genome_a[4], genome_a[5]]),
-            (genome_a[5], [genome_a[4], genome_a[5], None]),
-        ]
-
-        result = _collapse_tracks(aligned, "tandem")
-
-        assert len(result) == 2
-        assert [window for _, window, _ in result] == [
-            [genome_b[0], genome_b[1]],
-            [genome_a[4], genome_a[5]],
-        ]
+        assert [len(window) for _, window, _ in result] == [2, 2]
+        assert all(any(window[column] for _, window, _ in result) for column in range(2))
 
 
 # --- _build_tracks ---

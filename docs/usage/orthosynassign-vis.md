@@ -59,7 +59,7 @@ A SOG can hold several focal genes from the same genome, for instance a run of t
 A track is only merged into another when the kept window actually shows its focal gene, so no focal gene disappears from the figure. A long chain of overlapping windows is therefore split into as few tracks as are needed to show every copy.
 | `none` | No collapsing: one track per focal gene, as in v1.4.0 and earlier. |
 
-Collapsing is transitive, so a run of three tandem copies becomes a single track. The kept track is the one whose window shows the most genes, its title lists the collapsed gene IDs (truncated to three plus a count), and every focal gene of the group is drawn in the focal gene color `#fcfc42`.
+Collapsing is transitive, so a run of three tandem copies becomes a single track. A collapsed track shows the union of the windows of the focal genes it stands for, so no gene is lost by merging, its title lists the collapsed gene IDs (truncated to three plus a count), and every focal gene of the group is drawn in the focal gene color `#fcfc42`.
 
 ```sh
 orthosynassign-vis --og_file orthogroups.tsv --sog_file Refined_SOGs.tsv --bed *.bed \

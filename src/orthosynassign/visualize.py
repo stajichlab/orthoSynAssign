@@ -336,19 +336,23 @@ def _collapse_tracks(
         raise ValueError(f"Unknown collapse mode: {mode}. Choose from {', '.join(COLLAPSE_MODES)}.")
 
     if mode == "none" or len(aligned_data) < 2:
-        return _trim_empty_columns([(focal_gene, window, [focal_gene]) for focal_gene, window in aligned_data])
-
-    covers: list[tuple[int, list[int]]] = []
-    for group in _group_tracks(aligned_data, mode):
-        covers.extend(_split_group(group, aligned_data))
+        covers = [(idx, [idx]) for idx in range(len(aligned_data))]
+    else:
+        covers = []
+        for group in _group_tracks(aligned_data, mode):
+            covers.extend(_split_group(group, aligned_data))
 
     # Keep the tracks in the order the engine reports them, that is by genome and gene index
     collapsed = [
-        (aligned_data[kept][0], aligned_data[kept][1], [aligned_data[idx][0] for idx in members])
+        (
+            aligned_data[kept][0],
+            _merge_windows([aligned_data[idx][1] for idx in members]),
+            [aligned_data[idx][0] for idx in members],
+        )
         for kept, members in sorted(covers)
     ]
 
-    return _trim_empty_columns(collapsed)
+    return _align_tracks(collapsed)
 
 
 def _split_group(group: list[int], aligned_data: list[tuple[Gene, list[Gene]]]) -> list[tuple[int, list[int]]]:
@@ -400,39 +404,83 @@ def _covered_by(kept: int, candidates: list[int], aligned_data: list[tuple[Gene,
         list[int]: The indices of the tracks the kept window can stand for.
     """
     shown = _window_keys(aligned_data[kept][1])
-    return [idx for idx in candidates if (aligned_data[idx][0].seqid, aligned_data[idx][0].index) in shown]
+    return [idx for idx in candidates if _gene_key(aligned_data[idx][0]) in shown]
 
 
-def _trim_empty_columns(
-    tracks: list[tuple[Gene, list[Gene], list[Gene]]],
-) -> list[tuple[Gene, list[Gene], list[Gene]]]:
-    """Drops the aligned columns that hold no gene in any of the kept tracks.
+def _merge_windows(windows: list[list[Gene]]) -> list[Gene]:
+    """Merges the windows of the tracks that are drawn as one into a single window.
 
-    The windows are padded to a common length and aligned on their focal gene before
-    collapsing, so the padding also covers the tracks that collapsing then removes. Those
-    columns would be drawn as blank space in front of (or behind) every remaining track.
-    Dropping a column from every track at once keeps the tracks aligned.
+    Keeping only the window of the track that is kept would drop the genes that the other
+    windows show beyond its ends. The windows of a merged track overlap and each of them is a
+    run of consecutive genes, so the widest one is extended with what the others show before
+    its first and after its last gene. Working from the overlap, rather than from the gene
+    index, also holds for a window that wraps around the origin of a circular genome.
 
     Args:
-        tracks (list[tuple[Gene, list[Gene], list[Gene]]]): The kept tracks.
+        windows (list[list[Gene]]): The aligned windows to merge, padding included.
 
     Returns:
-        list[tuple[Gene, list[Gene], list[Gene]]]: The tracks without their empty columns.
+        list[Gene]: The genes of the merged window, in the order they are drawn.
+    """
+    runs = sorted(([gene for gene in window if gene] for window in windows), key=len, reverse=True)
+    merged = runs[0]
+
+    for run in runs[1:]:
+        shared = [idx for idx, gene in enumerate(run) if _gene_key(gene) in {_gene_key(g) for g in merged}]
+        if not shared:
+            # Not reachable for a merged track, whose windows always overlap
+            continue
+        merged = run[: shared[0]] + merged + run[shared[-1] + 1 :]
+
+    return merged
+
+
+def _align_tracks(
+    tracks: list[tuple[Gene, list[Gene], list[Gene]]],
+) -> list[tuple[Gene, list[Gene], list[Gene]]]:
+    """Lines the tracks up on their first focal gene by padding them with empty columns.
+
+    The engine aligns the windows it returns, but collapsing changes both which tracks are
+    drawn and how far each of them reaches, so the padding is rebuilt here. Only the columns
+    needed by the tracks that are actually drawn are kept, which is what stops a removed track
+    from leaving blank space behind.
+
+    Args:
+        tracks (list[tuple[Gene, list[Gene], list[Gene]]]): The tracks and their merged windows.
+
+    Returns:
+        list[tuple[Gene, list[Gene], list[Gene]]]: The tracks, their windows padded with `None`
+        to a common length.
     """
     if not tracks:
         return tracks
 
-    n_columns = max(len(window) for _, window, _ in tracks)
-    kept_columns = [
-        column for column in range(n_columns) if any(column < len(window) and window[column] for _, window, _ in tracks)
-    ]
-    if len(kept_columns) == n_columns:
-        return tracks
+    anchors = []
+    for _, window, members in tracks:
+        keys = [_gene_key(gene) for gene in window]
+        # The first focal gene of a track is the one its neighbours are aligned on
+        anchors.append(min((keys.index(_gene_key(gene)) for gene in members if _gene_key(gene) in keys), default=0))
+
+    max_anchor = max(anchors)
+    padded = [[None] * (max_anchor - anchor) + list(window) for (_, window, _), anchor in zip(tracks, anchors)]
+    length = max(len(window) for window in padded)
 
     return [
-        (focal_gene, [window[column] if column < len(window) else None for column in kept_columns], members)
-        for focal_gene, window, members in tracks
+        (focal_gene, window + [None] * (length - len(window)), members)
+        for (focal_gene, _, members), window in zip(tracks, padded)
     ]
+
+
+def _gene_key(gene: Gene) -> tuple[str, int]:
+    """Identifies a gene by its position in its genome.
+
+    Args:
+        gene (Gene): The gene to identify.
+
+    Returns:
+        tuple[str, int]: The contig and index of the gene.
+    """
+    return (gene.seqid, gene.index)
 
 
 def _group_tracks(aligned_data: list[tuple[Gene, list[Gene]]], mode: str) -> list[list[int]]:
@@ -517,7 +565,7 @@ def _window_keys(window: list[Gene]) -> set[tuple[str, int]]:
     Returns:
         set[tuple[str, int]]: One (contig, gene index) key per gene of the window.
     """
-    return {(gene.seqid, gene.index) for gene in window if gene and gene.index is not None}
+    return {_gene_key(gene) for gene in window if gene and gene.index is not None}
 
 
 def _get_palette(tracks: list[Track]) -> dict[str, str]:

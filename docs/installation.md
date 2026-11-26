@@ -133,7 +133,7 @@ explicitly with `pip install -e ".[dev,docs]"` if you want to build the document
 
 ## System Requirements
 
-- **[Python]**: `>= 3.9, < 3.15`
+- **[Python]**: `>= 3.10, < 3.15`
 - **[pyGenomeViz]**: `>= 1.6.0` (used by `orthosynassign-vis`)
 - **[Rust]**: `>= 1.75`, used to build the core synteny engine (only needed when installing from source without a prebuilt wheel)
 

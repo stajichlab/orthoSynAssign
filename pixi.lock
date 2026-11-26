@@ -1465,7 +1465,7 @@ packages:
   - furo>=2025.12.19 ; extra == 'docs'
   - sphinx-copybutton>=0.5.2 ; extra == 'docs'
   - sphinx-autobuild>=2024.10.3 ; extra == 'docs'
-  requires_python: '>=3.9,<3.15'
+  requires_python: '>=3.10,<3.15'
 - pypi: https://files.pythonhosted.org/packages/01/f9/575c8d760eae1fc99651b7cc5efd96ad5379ca4d6b53750b0fb4fe983f34/imagesize-2.0.1-py3-none-any.whl
   name: imagesize
   version: 2.0.1

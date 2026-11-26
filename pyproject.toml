@@ -15,7 +15,7 @@ maintainers = [
 license = { file = "LICENSE" }
 description = "Ortholog Synteny Assignment Tool for analyzing OrthoFinder results with genome annotations."
 readme = "README.md"
-requires-python = ">=3.9,<3.15"
+requires-python = ">=3.10,<3.15"
 classifiers = [
   "Development Status :: 5 - Production/Stable",
   "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
@@ -23,7 +23,6 @@ classifiers = [
   "Intended Audience :: Science/Research",
   "Topic :: Scientific/Engineering :: Bio-Informatics",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -126,7 +125,7 @@ platforms = ["linux-64", "osx-64", "osx-arm64"]
 
 [tool.pixi.dependencies]
 rust = ">=1.75"
-python = ">=3.9,<3.15"
+python = ">=3.10,<3.15"
 
 [tool.pixi.feature.prod.pypi-dependencies]
 orthosynassign = { path = ".", editable = false }

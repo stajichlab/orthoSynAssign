@@ -110,7 +110,7 @@ jobs:
           flags: rust
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  # One job per Python version in requires-python = ">=3.9,<3.15"; pip install builds the extension with maturin.
+  # One job per Python version in requires-python = ">=3.10,<3.15"; pip install builds the extension with maturin.
   # pytest writes coverage.xml through the addopts in pyproject.toml, which the shared workflow uploads.
   test-pip:
     name: Tests (pip)
@@ -118,7 +118,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.code == 'true'
     uses: stajichlab/gh_workflows/.github/workflows/python_test_pip.yml@v2
     with:
-      python_versions: '["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]'
+      python_versions: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
     secrets:
       codecov_token: ${{ secrets.CODECOV_TOKEN }}
 

@@ -33,6 +33,14 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - With ties kept, `utils::rescue_tandem_paralogs` no longer changes the result for linear genomes, because copies in a
   tandem run share the same window and tie. It is kept as a safety net for circular genomes.
 
+### Removed
+
+- Dropped support for Python 3.9, which reached end of life in October 2025 and is no longer available on the
+  `ubuntu-latest` GitHub Actions runner (Ubuntu 26.04), so the CI and release jobs for it could not even install an
+  interpreter. The minimum is now Python 3.10: `requires-python` is `>=3.10,<3.15`, the CI and publish matrices start
+  at 3.10, and the PyO3 extension is built against `abi3-py310`, so wheels are tagged `cp310-abi3` instead of
+  `cp39-abi3`.
+
 ## [1.4.0] - 2026-11-11
 
 ### Added

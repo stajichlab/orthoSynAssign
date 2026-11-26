@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-title: "orthoSynAssign: refine orthogroups using synteny information"
+title: "orthoSynAssign: partition orthogroups into positional orthologs using local synteny"
 message: If you use this software, please cite it using the metadata from this file.
 type: software
 authors:
@@ -8,6 +8,12 @@ authors:
     email: chenghung.tsai@email.ucr.edu
     affiliation: University of California-Riverside
     orcid: "https://orcid.org/0000-0003-3419-2146"
+  - given-names: Carolina
+    family-names: Piña Páez
+    name-particle: G
+    email: carolinp@ucr.edu
+    affiliation: University of California-Riverside
+    orcid: "https://orcid.org/0000-0002-2009-6703"
   - given-names: Jason
     family-names: Stajich
     name-particle: E
@@ -33,6 +39,7 @@ abstract: >-
   more efficient algorithms for finding overlaps between ortholog groups and genomic segments. The core logic has been carefully
   reviewed and tested to ensure accuracy and performance, focusing on robustness in handling large datasets.
 keywords:
+  - Software
   - Orthology
   - Paralogy
   - Synteny
@@ -40,6 +47,7 @@ keywords:
   - Rust
   - Comparative genomics
   - Phylogenomics
+  - Fungal genomics
   - OrthoFinder
 license: GPL-3.0-or-later
 version: 1.5.0

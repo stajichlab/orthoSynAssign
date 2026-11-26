@@ -7,6 +7,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-26
+
 ### Added
 
 - `orthosynassign-vis` marks the end of a contig with a dark bar beside the first or last gene of a track, so a
@@ -139,7 +141,9 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Multiprocessing support for refinement steps.
 - Companion script to visualize the refined orthologs.
 
-[Unreleased]: https://github.com/stajichlab/orthoSynAssign/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/stajichlab/orthoSynAssign/compare/v1.5.0...HEAD
+
+[1.5.0]: https://github.com/stajichlab/orthoSynAssign/compare/v1.4.0...v1.5.0
 
 [1.4.0]: https://github.com/stajichlab/orthoSynAssign/compare/v1.3.1...v1.4.0
 
